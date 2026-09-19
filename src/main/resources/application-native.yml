@@ -1,0 +1,12 @@
+# Extra profile for the GraalVM native executable, activated with MICRONAUT_ENVIRONMENTS=prod,native
+# (Dockerfile.native and the CI job do it). It is applied on top of application-prod.yml.
+jpa:
+  default:
+    properties:
+      hibernate:
+        # By default Hibernate generates entity proxies and enhancement classes at run time with ByteBuddy,
+        # which defines classes from bytecode: GraalVM's closed world forbids that. "none" turns it off. This
+        # project has no lazy to-one association that needs a proxy, so nothing is lost; it is kept out of
+        # the JVM profiles so their behaviour does not change.
+        bytecode:
+          provider: none
