@@ -48,6 +48,41 @@ class FlywayMigrationTest {
     }
 
     @Test
+    void versionTwoSeedsTheFourteenBaselinePermissionsAndTheAdminRoleHoldingAll() throws SQLException {
+        Set<String> expected = new HashSet<>();
+        for (String resource : new String[]{"USER", "ROLE", "PERMISSION", "CATEGORY", "PRODUCT", "CUSTOMER", "ORDER"}) {
+            expected.add(resource + ":READ");
+            expected.add(resource + ":WRITE");
+        }
+        assertEquals(14, expected.size());
+        try (Connection c = dataSource.getConnection()) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT success FROM flyway_schema_history WHERE version = '2'");
+                 ResultSet rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "migration V2 is missing from flyway_schema_history");
+                assertTrue(rs.getBoolean(1));
+            }
+            Set<String> permissions = new HashSet<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT resource || ':' || action FROM permissions");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    permissions.add(rs.getString(1));
+                }
+            }
+            assertEquals(expected, permissions);
+            Set<String> adminHolds = new HashSet<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT p.resource || ':' || p.action FROM roles r "
+                    + "JOIN role_permission rp ON rp.role_id = r.id JOIN permissions p ON p.id = rp.permission_id "
+                    + "WHERE r.role_name = 'ADMIN'");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    adminHolds.add(rs.getString(1));
+                }
+            }
+            assertEquals(expected, adminHolds);
+        }
+    }
+
+    @Test
     void allTablesOfBothDomainsExist() throws SQLException {
         Set<String> found = new HashSet<>();
         try (Connection c = dataSource.getConnection();
