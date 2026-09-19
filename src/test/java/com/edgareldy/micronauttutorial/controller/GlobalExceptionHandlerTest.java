@@ -145,7 +145,9 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void wrongMethodIs405() {
-        assertError(given().get(BASE + "/no-body").then(), 405);
+        // RFC 9110: a 405 must tell the client which methods are allowed.
+        assertError(given().get(BASE + "/no-body").then(), 405)
+                .header("Allow", containsString("POST"));
     }
 
     @Test

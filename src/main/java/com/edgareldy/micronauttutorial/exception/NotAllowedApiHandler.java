@@ -24,6 +24,9 @@ public class NotAllowedApiHandler implements ExceptionHandler<NotAllowedExceptio
 
     @Override
     public HttpResponse<?> handle(HttpRequest request, NotAllowedException exception) {
-        return GlobalExceptionHandler.toResponse(exception);
+        // RFC 9110 requires an Allow header on a 405, which the built-in handler set and a plain
+        // status response would drop.
+        return HttpResponse.<Object>notAllowedGeneric(exception.getAllowedMethods())
+                .body(GlobalExceptionHandler.toResponse(exception).body());
     }
 }
