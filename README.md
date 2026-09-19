@@ -377,7 +377,7 @@ Micronaut resolves dependency injection, AOP, validation, serialization and repo
 - [ ] `Dockerfile.native`: multi-stage, native executable built in a GraalVM builder stage, small non-root runtime stage
 - [ ] `scripts/measure-startup.sh`: starts the JVM jar and the native executable against the same PostgreSQL and reports time to ready, reported startup time and resident memory after a few requests
 - [ ] `.github/workflows/ci.yml`: a separate `native-build` job (with a PostgreSQL service, because the packaged application has no Test Resources) that compiles the native executable, runs the measurement into the job summary and checks that `Dockerfile.native` builds
-- [ ] Verified behaviour of the native executable: health, registration, activation, login, a permission-protected endpoint (the compile-time AOP interceptor), a cached read and a scheduled bean, all with the same responses as the JVM build
+- [ ] `scripts/smoke-test.sh` and verified behaviour of the native executable: health, registration, activation, login, a permission-protected endpoint (the compile-time AOP interceptor), a cached read, the JWT blacklist and the `ApiResponse` error format, all with the same responses as the JVM build (`scripts/smoke-test.sh`, run in CI against both). The `@Scheduled` cleanup job only fires at 03:00, so CI can only show that the application starts with it
 
 Native compilation needs about 3.5 GB of memory: it is done in CI, not on a small local Docker VM.
 
