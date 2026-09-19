@@ -328,6 +328,37 @@ class AuthControllerTest {
     // ---------------------------------------------------------------- forgot password
 
     @Test
+    void registerRefusesAMultibytePasswordOver72BytesInsteadOfFailing() {
+        // 40 characters pass @Size(max = 72) but are 80 bytes in UTF-8, beyond what bcrypt accepts.
+        assertError(support.register(uniqueEmail(), "\u00e9".repeat(40)).then(), 422)
+                .body("message", containsString("72 bytes"));
+    }
+
+    @Test
+    void loginWithAnOverLongPasswordIsAPlainMismatch() {
+        String email = uniqueEmail();
+        support.registerAndActivate(email);
+        var wrong = support.login(email, "WrongPassword1!");
+        var tooLong = support.login(email, "\u00e9".repeat(40));
+        assertError(tooLong.then(), 401);
+        assertEquals(message(wrong), message(tooLong));
+    }
+
+    @Test
+    void repeatedForgotPasswordDoesNotInvalidateThePendingToken() {
+        String email = uniqueEmail();
+        long id = support.registerAndActivate(email);
+
+        given().contentType(ContentType.JSON).body(Map.of("email", email)).post(FORGOT).then().statusCode(200);
+        String first = support.resetToken(id);
+        // An anonymous caller repeating the request must not wipe the victim's valid token.
+        given().contentType(ContentType.JSON).body(Map.of("email", email)).post(FORGOT).then().statusCode(200);
+
+        given().contentType(ContentType.JSON).body(Map.of("token", first, "newPassword", "NewPassword456!"))
+                .post(RESET).then().statusCode(200);
+    }
+
+    @Test
     void forgotPasswordIsIdenticalForKnownAndUnknownEmails() {
         String known = uniqueEmail();
         support.registerAndActivate(known);
