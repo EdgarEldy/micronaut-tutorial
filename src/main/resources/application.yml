@@ -73,3 +73,7 @@ app:
   jwt:
     issuer: micronaut-tutorial
     lifespan: 3600
+  # Lifetime of the one-shot tokens (Micronaut Duration syntax: 24h, 30m, 1d...).
+  tokens:
+    activation-ttl: 24h
+    reset-ttl: 1h
