@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # No "services: postgres" block on purpose. Micronaut Test Resources starts its own PostgreSQL
+      # container through the Docker daemon already available on ubuntu-latest, exactly as it does
+      # locally, so the tests need nothing provisioned by the workflow.
+      - name: Build and test
+        run: ./mvnw -B verify
