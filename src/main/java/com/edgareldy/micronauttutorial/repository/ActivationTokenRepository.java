@@ -27,4 +27,7 @@ public interface ActivationTokenRepository extends JpaRepository<ActivationToken
      */
     @Query("UPDATE ActivationToken SET validatedAt = :now WHERE id = :id AND validatedAt IS NULL")
     long markValidated(Long id, Instant now);
+
+    /** Purges the activation tokens past their expiry (used by the daily cleanup job). */
+    long deleteByExpiresAtBefore(Instant threshold);
 }
