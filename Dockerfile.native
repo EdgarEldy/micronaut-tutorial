@@ -1,0 +1,35 @@
+# Multi-stage image for the GraalVM native executable.
+# Stage 1 compiles the application to a native binary with GraalVM's native-image, stage 2 keeps only
+# that binary on a minimal runtime image: no JVM, no Maven, no sources.
+
+FROM ghcr.io/graalvm/native-image-community:21 AS build
+WORKDIR /build
+
+# The builder image ships native-image but not Maven, so the Maven wrapper is used. Copying the wrapper
+# and the pom alone first lets Docker cache the dependency download until the pom changes.
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+RUN ./mvnw -B -q dependency:go-offline
+
+COPY src ./src
+# -Dpackaging=native-image switches on the Micronaut parent's native profile. Tests are skipped here:
+# they rely on Test Resources, which needs a Docker daemon a build stage does not have, and they run in
+# CI with mvn verify.
+RUN ./mvnw -B -q package -Dpackaging=native-image -DskipTests
+
+# The executable is dynamically linked against glibc only, which this slim image provides.
+FROM debian:bookworm-slim
+WORKDIR /app
+
+# Same idea as the JVM Dockerfile: never run as root.
+RUN useradd --system --no-create-home micronaut
+USER micronaut
+
+COPY --from=build --chown=micronaut /build/target/micronaut-tutorial ./application
+# The prod environment turns on application-prod.yml: database and JWT key locations come from the
+# environment, with no default.
+ENV MICRONAUT_ENVIRONMENTS=prod
+
+EXPOSE 8080
+ENTRYPOINT ["./application"]
