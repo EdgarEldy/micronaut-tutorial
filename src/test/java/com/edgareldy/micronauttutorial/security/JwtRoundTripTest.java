@@ -13,9 +13,11 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Proves the RS256 key pair loads and that a token signed with it validates and keeps its custom claim.
@@ -47,7 +49,9 @@ class JwtRoundTripTest {
 
     @Test
     void generatedTokenValidatesAndCarriesCustomClaim() {
-        Authentication auth = Authentication.build("user@example.com", Map.of("permissions", List.of("ROLE:WRITE")));
+        // A jti is required since feature/auth: BlacklistedTokenClaimsValidator refuses any token without one.
+        Authentication auth = Authentication.build("user@example.com",
+                Map.of("permissions", List.of("ROLE:WRITE"), "jti", UUID.randomUUID().toString()));
 
         String token = tokenGenerator.generateToken(auth, 60).orElseThrow();
         Authentication validated = Mono.from(tokenValidator.validateToken(token, HttpRequest.GET("/")))
@@ -56,5 +60,14 @@ class JwtRoundTripTest {
         assertNotNull(validated);
         assertEquals("user@example.com", validated.getName());
         assertEquals(List.of("ROLE:WRITE"), validated.getAttributes().get("permissions"));
+    }
+
+    @Test
+    void tokenWithoutJtiIsRejected() {
+        Authentication auth = Authentication.build("user@example.com", Map.of("permissions", List.of("ROLE:WRITE")));
+
+        String token = tokenGenerator.generateToken(auth, 60).orElseThrow();
+
+        assertNull(Mono.from(tokenValidator.validateToken(token, HttpRequest.GET("/"))).block());
     }
 }
