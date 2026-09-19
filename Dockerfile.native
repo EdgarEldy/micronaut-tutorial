@@ -33,4 +33,6 @@ COPY --from=build --chown=micronaut /build/target/micronaut-tutorial ./applicati
 ENV MICRONAUT_ENVIRONMENTS=prod,native
 
 EXPOSE 8080
-ENTRYPOINT ["./application"]
+# net.bytebuddy.generate=false: Hibernate's ByteBuddy generates helper classes at run time, which a native
+# image cannot define. With this switch ByteBuddy falls back to plain reflection for them.
+ENTRYPOINT ["./application", "-Dnet.bytebuddy.generate=false"]

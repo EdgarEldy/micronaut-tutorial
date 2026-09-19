@@ -87,7 +87,7 @@ jobs:
         run: |
           scripts/smoke-test.sh jvm java -jar "$RUNNER_TEMP/jvm/app.jar"
           # Both runs share the database: the users created by the first run must not collide.
-          MICRONAUT_ENVIRONMENTS=prod,native scripts/smoke-test.sh native target/micronaut-tutorial
+          MICRONAUT_ENVIRONMENTS=prod,native scripts/smoke-test.sh native target/micronaut-tutorial -Dnet.bytebuddy.generate=false
 
       - name: Measure JVM mode against native mode
         run: |
@@ -95,7 +95,7 @@ jobs:
             echo "| Mode | Ready after (ms) | Reported startup (ms) | RSS after load (MB) |"
             echo "|---|---|---|---|"
             scripts/measure-startup.sh jvm java -jar "$RUNNER_TEMP/jvm/app.jar"
-            MICRONAUT_ENVIRONMENTS=prod,native scripts/measure-startup.sh native target/micronaut-tutorial
+            MICRONAUT_ENVIRONMENTS=prod,native scripts/measure-startup.sh native target/micronaut-tutorial -Dnet.bytebuddy.generate=false
           } | tee -a "$GITHUB_STEP_SUMMARY"
           ls -l target/micronaut-tutorial
 
