@@ -23,6 +23,7 @@ This document is the **complete specification** of the project: it is meant to b
 - [feature/products](#featureproducts)
 - [feature/customers](#featurecustomers)
 - [feature/orders](#featureorders)
+- [feature/native-build (bonus)](#featurenative-build-bonus)
 - [Order of work](#order-of-work)
 - [Code conventions](#code-conventions)
 - [Concepts covered](#concepts-covered)
@@ -131,6 +132,7 @@ customers (id, first_name, last_name, telephone, email, address)
 | `feature/products` | Product CRUD, depends on `categories`. |
 | `feature/customers` | Customer CRUD. |
 | `feature/orders` | Order create/read (orders are immutable), depends on `products`/`customers`. |
+| `feature/native-build` | Bonus: GraalVM native executable, `Dockerfile.native`, JVM versus native measurements, CI job. |
 
 ## Project structure
 
@@ -365,6 +367,20 @@ Depends on `feature/categories` existing, since every product references one.
 - [x] `OrderController`
 - [x] Tests, including the total computation
 
+## feature/native-build (bonus)
+
+Micronaut resolves dependency injection, AOP, validation, serialization and repositories at compile time, so most of the reflection metadata a GraalVM native image needs is already generated. This branch proves it: the same application is compiled to a native executable and compared with the JVM build.
+
+### Tasks
+
+- [ ] Native build through the Micronaut parent's `native-maven-plugin` profile (`./mvnw package -Dpackaging=native-image`), with any reflection or resource hint that the compiler could not generate on its own (verified by running the executable, not assumed)
+- [ ] `Dockerfile.native`: multi-stage, native executable built in a GraalVM builder stage, small non-root runtime stage
+- [ ] `scripts/measure-startup.sh`: starts the JVM jar and the native executable against the same PostgreSQL and reports time to ready, reported startup time and resident memory after a few requests
+- [ ] `.github/workflows/ci.yml`: a separate `native-build` job (with a PostgreSQL service, because the packaged application has no Test Resources) that compiles the native executable, runs the measurement into the job summary and checks that `Dockerfile.native` builds
+- [ ] Verified behaviour of the native executable: health, registration, activation, login, a permission-protected endpoint (the compile-time AOP interceptor), a cached read and a scheduled bean, all with the same responses as the JVM build
+
+Native compilation needs about 3.5 GB of memory: it is done in CI, not on a small local Docker VM.
+
 ## Order of work
 
 1. `feature/core-architecture` → Pull Request to `develop`
@@ -374,7 +390,8 @@ Depends on `feature/categories` existing, since every product references one.
 5. `feature/products` (depends on `categories`) → Pull Request to `develop`
 6. `feature/customers` (depends on `rbac`) → Pull Request to `develop`
 7. `feature/orders` (depends on `products`, `customers`) → Pull Request to `develop`
-8. `develop` → `master`
+8. `feature/native-build` (bonus, depends on everything above) → Pull Request to `develop`
+9. `develop` → `master`
 
 ## Code conventions
 
@@ -403,6 +420,7 @@ Depends on `feature/categories` existing, since every product references one.
 - Audit logging as a first-class concern for every sensitive RBAC mutation
 - Testing with `@MicronautTest` and REST Assured, without manual Testcontainers setup
 - Containerization (Docker, docker-compose)
+- GraalVM native image: what the compile-time model already generates and what still needs a hint
 - Continuous integration (GitHub Actions)
 
 ## How to follow this tutorial
