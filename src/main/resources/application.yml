@@ -1,0 +1,75 @@
+# Base configuration shared by every environment. Micronaut loads application.yml first, then overlays
+# application-<env>.yml for each active environment (dev, test, prod...): this is the "environment
+# profile" mechanism. Nothing environment specific (datasource URL, key locations) lives here.
+micronaut:
+  application:
+    name: micronaut-tutorial
+  security:
+    # Bearer: the JWT travels in the Authorization header. Every route requires authentication
+    # unless it is explicitly opened in intercept-url-map or by an annotation.
+    authentication: bearer
+    # Unknown routes answer 404 (handled below) instead of 401 for anonymous callers.
+    reject-not-found: false
+    intercept-url-map:
+      # Swagger UI and the generated OpenAPI YAML must be readable without a token.
+      - pattern: /swagger/**
+        access:
+          - isAnonymous()
+      - pattern: /swagger-ui/**
+        access:
+          - isAnonymous()
+  router:
+    static-resources:
+      # Files generated at compile time by micronaut-openapi (see pom.xml compiler args).
+      swagger:
+        paths: classpath:META-INF/swagger
+        mapping: /swagger/**
+      swagger-ui:
+        paths: classpath:META-INF/swagger/views/swagger-ui
+        mapping: /swagger-ui/**
+  serde:
+    # java.time.Instant written as ISO-8601 text instead of an epoch number.
+    time-write-shape: STRING
+
+# Management endpoints (micronaut-management): only /health is public, without details.
+# Any other endpoint stays sensitive, i.e. protected by Micronaut Security.
+endpoints:
+  all:
+    sensitive: true
+  health:
+    enabled: true
+    sensitive: false
+    details-visible: NEVER
+
+datasources:
+  default:
+    # No url/username/password here: Test Resources provisions a PostgreSQL container in dev/test,
+    # and application-prod.yml supplies the real connection from environment variables.
+    driver-class-name: org.postgresql.Driver
+    dialect: POSTGRES
+
+jpa:
+  default:
+    properties:
+      hibernate:
+        # Flyway owns the schema. Hibernate never creates or alters tables.
+        hbm2ddl:
+          auto: none
+
+flyway:
+  datasources:
+    default:
+      enabled: true
+
+# Test Resources: pin the PostgreSQL image used in dev and test to the production major version.
+test-resources:
+  containers:
+    postgres:
+      image-name: postgres:16
+
+# JWT signing key pair (RS256). No default location here on purpose: dev and test point to dev-keys/,
+# prod must set JWT_PRIVATE_KEY_LOCATION and JWT_PUBLIC_KEY_LOCATION or startup fails.
+app:
+  jwt:
+    issuer: micronaut-tutorial
+    lifespan: 3600
