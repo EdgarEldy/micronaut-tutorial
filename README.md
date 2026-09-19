@@ -345,9 +345,9 @@ Depends on `feature/categories` existing, since every product references one.
 
 ### Tasks
 
-- [ ] `Customer` entity, repository, contract/implementation service
-- [ ] `CustomerController`
-- [ ] Tests
+- [x] `Customer` entity, repository, contract/implementation service
+- [x] `CustomerController`
+- [x] Tests
 
 ## feature/orders
 
