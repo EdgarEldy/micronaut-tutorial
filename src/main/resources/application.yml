@@ -27,6 +27,11 @@ micronaut:
       swagger-ui:
         paths: classpath:META-INF/swagger/views/swagger-ui
         mapping: /swagger-ui/**
+  # Caffeine caches (micronaut-cache-caffeine): one entry per property block, named as in @Cacheable.
+  caches:
+    product-cache:
+      maximum-size: 500
+      expire-after-write: 10m
   serde:
     # java.time.Instant written as ISO-8601 text instead of an epoch number.
     time-write-shape: STRING
