@@ -60,7 +60,7 @@ Micronaut has no framework-provided fine-grained permission annotation (its own 
 
 ## Micronaut Data: repositories with no hand-written implementation
 
-`@Repository` on an interface is enough - Micronaut Data's own annotation processor reads the method signatures (`findByEmail`, `findByCategoryId`, ...) at compile time and generates the SQL and the implementing class itself, the same way Spring Data does, except the implementation is real generated Java source inspectable in `build/generated`, not a runtime dynamic proxy. This tutorial never hand-writes a `*RepositoryImpl` class the way a framework without this capability would require - only the `service/impl/` layer (genuine business logic) follows the contract/implementation split described in [Code conventions](#code-conventions).
+`@Repository` on an interface is enough - Micronaut Data's own annotation processor reads the method signatures (`findByEmail`, `findByCategoryId`, ...) at compile time and generates the SQL and the implementing class itself, the same way Spring Data does, except the implementation is real generated Java source inspectable in `target/generated-sources/annotations`, not a runtime dynamic proxy. This tutorial never hand-writes a `*RepositoryImpl` class the way a framework without this capability would require - only the `service/impl/` layer (genuine business logic) follows the contract/implementation split described in [Code conventions](#code-conventions).
 
 ## Test Resources: why there's no manual Testcontainers setup
 
@@ -75,7 +75,7 @@ With `micronaut-test-resources-jdbc-postgresql` on the classpath and no datasour
 | Build | Maven |
 | HTTP | Micronaut HTTP Server (Netty), `@Controller`/`@Get`/`@Post`/... |
 | Database | PostgreSQL 16 (Test Resources in dev/test, Docker Compose for the packaged app) |
-| Data access | Micronaut Data JPA (`@Repository`, compile-time generated implementations) |
+| Data access | Micronaut Data JPA (`micronaut-data-hibernate-jpa`, `@Repository`, compile-time generated implementations) |
 | Migrations | Micronaut Flyway integration |
 | Validation | Micronaut Validation (Jakarta Bean Validation, compile-time processed) |
 | Security | `micronaut-security-jwt` (token issuance/validation), custom compile-time AOP for fine-grained permissions |
@@ -167,11 +167,13 @@ micronaut-tutorial/
 │   │   │   │   └── PermissionInterceptor.java      (MethodInterceptor<Object, Object>)
 │   │   │   └── exception/
 │   │   │       ├── ResourceNotFoundException.java, BusinessRuleException.java
-│   │   │       └── GlobalExceptionHandler.java     (ExceptionHandler<Exception, HttpResponse<?>>)
+│   │   │       ├── GlobalExceptionHandler.java     (ExceptionHandler<Exception, HttpResponse<?>>)
+│   │   │       └── *ApiHandler.java                (@Replaces of the framework's more specific handlers, all delegating to GlobalExceptionHandler)
 │   │   └── resources/
 │   │       ├── application.yml
 │   │       ├── application-dev.yml
 │   │       ├── application-test.yml
+│   │       ├── application-prod.yml            (packaged app: datasource and JWT key paths from the environment)
 │   │       └── db/migration/
 │   │           └── V1__init_schema.sql
 │   └── test/
@@ -179,6 +181,7 @@ micronaut-tutorial/
 │           ├── controller/  (@MicronautTest + REST Assured)
 │           ├── service/     (Mockito)
 │           └── repository/  (@MicronautTest, Test Resources-backed PostgreSQL, no manual container setup)
+├── dev-keys/                             (development-only RSA key pair, deliberately outside src/main/resources)
 ├── docker-compose.yml
 ├── Dockerfile
 ├── .github/workflows/ci.yml
@@ -209,18 +212,20 @@ public record ApiResponse<T>(
 
 `GlobalExceptionHandler` (`ExceptionHandler<Exception, HttpResponse<?>>`, annotated `@Produces` + `@Singleton` + `@Requires(classes = Exception.class)`) maps `ResourceNotFoundException` to 404, Bean Validation failures to 400 (with per-field messages), `BusinessRuleException` to 422, and anything unmapped to 500 - always returning an `ApiResponse<Void>` with `success = false`.
 
+Micronaut picks the exception handler whose type is closest to the thrown exception, so the framework's own more specific handlers (`ConstraintExceptionHandler`, `HttpStatusHandler`, `NotAllowedExceptionHandler`, `ConversionErrorHandler`, `UnsatisfiedRouteHandler`, `UnsatisfiedArgumentHandler`, `JsonExceptionHandler`) would win over a handler for `Exception` and answer in the framework's own format. Each one is replaced (`@Replaces`) by a small handler delegating to the same mapping method of `GlobalExceptionHandler`, so validation errors, unknown routes (404), wrong methods (405), unsupported content types (415) and malformed JSON (400) all come back as an `ApiResponse` too. `micronaut.security.reject-not-found` is set to `false` so anonymous callers get those statuses instead of a 401. The 401/403 produced by Micronaut Security itself are handled in `feature/auth` and `feature/rbac`.
+
 ## feature/core-architecture
 
 ### Tasks
 
-- [ ] Generate the project via Micronaut Launch (`https://launch.micronaut.io`) or the `mn` CLI, Java 21, Maven, Micronaut Framework 4.x
-- [ ] Dependencies: `micronaut-http-server-netty`, `micronaut-data-jpa`, `micronaut-jdbc-hikari`, `postgresql` driver, `micronaut-flyway`, `micronaut-validation`, `micronaut-security-jwt`, `micronaut-openapi`, `micronaut-management`, `micronaut-cache-caffeine`
-- [ ] Test dependencies: `micronaut-test-junit5`, `rest-assured`, `micronaut-test-resources-jdbc-postgresql`
-- [ ] `ApiResponse<T>`, `PageResponse<T>`, `GlobalExceptionHandler`
-- [ ] Flyway script `V1__init_schema.sql` (all tables from both domains)
-- [ ] `application.yml`: JWT signing key location, Flyway enabled; `application-dev.yml`/`application-test.yml` left without a configured datasource (Test Resources provisions PostgreSQL automatically); a real connection string only under the packaged/production configuration
-- [ ] `docker-compose.yml` (app + PostgreSQL, for the packaged application only - not used in dev/test), `Dockerfile`
-- [ ] `.github/workflows/ci.yml`: `mvn verify` (Test Resources provisions PostgreSQL inside the CI runner automatically, same as locally)
+- [x] Generate the project via Micronaut Launch (`https://launch.micronaut.io`) or the `mn` CLI, Java 21, Maven, Micronaut Framework 4.x
+- [x] Dependencies: `micronaut-http-server-netty`, `micronaut-data-hibernate-jpa`, `micronaut-jdbc-hikari`, `postgresql` driver, `micronaut-flyway`, `micronaut-validation`, `micronaut-security-jwt`, `micronaut-openapi`, `micronaut-management`, `micronaut-cache-caffeine`
+- [x] Test dependencies: `micronaut-test-junit5`, `rest-assured`, `micronaut-test-resources-jdbc-postgresql`
+- [x] `ApiResponse<T>`, `PageResponse<T>`, `GlobalExceptionHandler`
+- [x] Flyway script `V1__init_schema.sql` (all tables from both domains)
+- [x] `application.yml`: JWT signing key location (RS256 key files under `dev-keys/` in dev/test, environment variables with no default in prod), Flyway enabled; `application-dev.yml`/`application-test.yml` left without a configured datasource (Test Resources provisions PostgreSQL automatically); a real connection string only under the packaged/production configuration
+- [x] `docker-compose.yml` (app + PostgreSQL, for the packaged application only - not used in dev/test), `Dockerfile`
+- [x] `.github/workflows/ci.yml`: `mvn verify` (Test Resources provisions PostgreSQL inside the CI runner automatically, same as locally)
 
 ## feature/auth
 
@@ -405,5 +410,5 @@ Depends on `feature/categories` existing, since every product references one.
 1. Clone the repository : https://github.com/EdgarEldy/micronaut-tutorial.git and check out `develop`
 2. Follow the branches in order: `feature/core-architecture` → `feature/auth` → `feature/rbac` → `feature/categories` → `feature/products` → `feature/customers` → `feature/orders`
 3. Run in dev mode: `mvn mn:run` (Test Resources starts PostgreSQL automatically, no `docker-compose up` needed for this)
-4. Browse Swagger UI at `http://localhost:8080/swagger-ui`
+4. Browse Swagger UI at `http://localhost:8085/swagger-ui` in dev mode (the OpenAPI YAML is at `/swagger/micronaut-tutorial-0.1.yml`)
 5. To run the packaged application instead: `docker-compose up`

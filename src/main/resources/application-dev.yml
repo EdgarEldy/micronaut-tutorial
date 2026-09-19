@@ -1,0 +1,10 @@
+# Development profile (active with mvn mn:run). No datasource URL: Test Resources starts PostgreSQL.
+micronaut:
+  server:
+    port: 8085
+
+app:
+  jwt:
+    # Relative to the working directory (repo root). Dev keys only, never used in production.
+    private-key-location: file:dev-keys/privateKey.pem
+    public-key-location: file:dev-keys/publicKey.pem
