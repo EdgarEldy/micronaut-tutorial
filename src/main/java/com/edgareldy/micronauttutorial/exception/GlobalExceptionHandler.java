@@ -11,9 +11,11 @@ import io.micronaut.web.router.exceptions.UnsatisfiedRouteException;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
+import io.micronaut.http.MutableHttpResponse;
 import io.micronaut.http.annotation.Produces;
 import io.micronaut.http.exceptions.HttpStatusException;
 import io.micronaut.http.server.exceptions.ExceptionHandler;
+import io.micronaut.security.authentication.AuthorizationException;
 import jakarta.inject.Singleton;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -78,6 +80,19 @@ public class GlobalExceptionHandler implements ExceptionHandler<Exception, HttpR
         if (exception instanceof BusinessRuleException e) {
             return build(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
         }
+        if (exception instanceof AuthenticationFailedException e) {
+            return build(HttpStatus.UNAUTHORIZED, e.getMessage());
+        }
+        if (exception instanceof ForbiddenException e) {
+            return build(HttpStatus.FORBIDDEN, e.getMessage());
+        }
+        if (exception instanceof AuthorizationException e) {
+            // Raised by Micronaut Security itself: no/invalid/expired/blacklisted token (401) or missing role (403).
+            if (e.isForbidden()) {
+                return build(HttpStatus.FORBIDDEN, "Access denied");
+            }
+            return build(HttpStatus.UNAUTHORIZED, "Authentication required").header("WWW-Authenticate", "Bearer");
+        }
         if (exception instanceof HttpStatusException e) {
             return build(e.getStatus(), e.getMessage() != null ? e.getMessage() : e.getStatus().getReason());
         }
@@ -98,7 +113,7 @@ public class GlobalExceptionHandler implements ExceptionHandler<Exception, HttpR
         return dot < 0 ? path : path.substring(dot + 1);
     }
 
-    private static HttpResponse<ApiResponse<Void>> build(HttpStatus status, String message) {
+    private static MutableHttpResponse<ApiResponse<Void>> build(HttpStatus status, String message) {
         return HttpResponse.status(status).body(ApiResponse.error(message));
     }
 }
