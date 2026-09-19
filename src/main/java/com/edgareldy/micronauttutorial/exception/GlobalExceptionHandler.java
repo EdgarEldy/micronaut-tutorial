@@ -79,7 +79,7 @@ public class GlobalExceptionHandler implements ExceptionHandler<Exception, HttpR
             return build(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
         }
         if (exception instanceof HttpStatusException e) {
-            return build(e.getStatus(), e.getMessage());
+            return build(e.getStatus(), e.getMessage() != null ? e.getMessage() : e.getStatus().getReason());
         }
         LOG.error("Unhandled exception", exception);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
