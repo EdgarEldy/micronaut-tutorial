@@ -21,6 +21,7 @@ import com.edgareldy.micronauttutorial.security.JwtIssuer;
 import com.edgareldy.micronauttutorial.security.TokenHasher;
 import com.edgareldy.micronauttutorial.security.TokenProperties;
 import com.edgareldy.micronauttutorial.service.AuthService;
+import io.micronaut.data.exceptions.DataAccessException;
 import io.micronaut.security.authentication.Authentication;
 import io.micronaut.transaction.annotation.Transactional;
 import jakarta.inject.Singleton;
@@ -28,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
@@ -56,6 +58,7 @@ public class AuthServiceImpl implements AuthService {
     static final String INVALID_ACTIVATION_TOKEN = "Invalid or expired activation token";
     static final String INVALID_RESET_TOKEN = "Invalid or expired password reset token";
     private static final long NO_USER_ID = -1L;
+    private static final int MAX_PASSWORD_BYTES = 72;
 
     private final UserRepository users;
     private final ActivationTokenRepository activationTokens;
@@ -91,8 +94,16 @@ public class AuthServiceImpl implements AuthService {
         if (users.existsByEmail(email)) {
             throw new BusinessRuleException("Email is already registered");
         }
-        User user = users.save(new User(request.firstName().trim(), request.lastName().trim(), email,
-                passwordEncoder.encode(request.password())));
+        requireBcryptCompatible(request.password());
+        User user;
+        try {
+            user = users.save(new User(request.firstName().trim(), request.lastName().trim(), email,
+                    passwordEncoder.encode(request.password())));
+        } catch (DataAccessException e) {
+            // Two concurrent registrations of the same email both pass existsByEmail: the unique
+            // constraint decides, and the loser gets the same 422 as a sequential duplicate.
+            throw new BusinessRuleException("Email is already registered");
+        }
         String raw = newRawToken();
         Instant now = Instant.now();
         activationTokens.save(new ActivationToken(user.getId(), TokenHasher.sha256Hex(raw), now,
@@ -119,7 +130,7 @@ public class AuthServiceImpl implements AuthService {
     public LoginResponse login(LoginRequest request) {
         User user = users.findByEmail(normalise(request.email())).orElse(null);
         // Always one bcrypt verification, against a dummy hash when the email is unknown.
-        boolean passwordOk = passwordEncoder.matches(request.password(), user != null ? user.getPassword() : dummyHash);
+        boolean passwordOk = matchesSafely(request.password(), user != null ? user.getPassword() : dummyHash);
         if (user == null || !passwordOk) {
             throw new AuthenticationFailedException(INVALID_CREDENTIALS);
         }
@@ -164,7 +175,9 @@ public class AuthServiceImpl implements AuthService {
         User user = users.findByEmail(normalise(request.email())).orElse(null);
         String raw = newRawToken();
         String hash = TokenHasher.sha256Hex(raw);
-        resetTokens.deleteByUserId(user != null ? user.getId() : NO_USER_ID);
+        // Only expired tokens are purged: deleting the pending ones would let an anonymous caller keep
+        // invalidating a victim's valid reset token by calling this endpoint repeatedly.
+        resetTokens.deleteByUserIdAndExpiryDateBefore(user != null ? user.getId() : NO_USER_ID, Instant.now());
         if (user != null) {
             resetTokens.save(new PasswordResetToken(user.getId(), hash, Instant.now().plus(tokenProperties.resetTtl())));
             LOG.info("Password reset token for user {}: {}", user.getId(), raw);
@@ -180,10 +193,33 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessRuleException(INVALID_RESET_TOKEN);
         }
         User user = users.findById(stored.getUserId()).orElseThrow(() -> new BusinessRuleException(INVALID_RESET_TOKEN));
+        requireBcryptCompatible(request.newPassword());
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         users.update(user);
         // Any other outstanding reset token of this user is now obsolete.
         resetTokens.deleteByUserId(user.getId());
+    }
+
+    /**
+     * BCrypt only reads the first 72 BYTES of a password and the encoder refuses longer ones, while Bean
+     * Validation counts characters: 40 multibyte characters can exceed 72 bytes. Refuse them cleanly.
+     */
+    private static void requireBcryptCompatible(String password) {
+        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            throw new BusinessRuleException("Password must not exceed " + MAX_PASSWORD_BYTES + " bytes in UTF-8");
+        }
+    }
+
+    /**
+     * Password check that treats an over-long password as a plain mismatch, still paying for one bcrypt
+     * verification so the response time stays close to a normal failed login.
+     */
+    private boolean matchesSafely(String rawPassword, String hash) {
+        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            passwordEncoder.matches("x", hash);
+            return false;
+        }
+        return passwordEncoder.matches(rawPassword, hash);
     }
 
     /** 32 random bytes, base64url without padding (256 bits of entropy). */
