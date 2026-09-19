@@ -7,6 +7,7 @@ import com.edgareldy.micronauttutorial.entity.Category;
 import com.edgareldy.micronauttutorial.exception.BusinessRuleException;
 import com.edgareldy.micronauttutorial.exception.ResourceNotFoundException;
 import com.edgareldy.micronauttutorial.repository.CategoryRepository;
+import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.edgareldy.micronauttutorial.service.CategoryService;
 import io.micronaut.data.model.Pageable;
 import io.micronaut.data.model.Sort;
@@ -26,9 +27,11 @@ import jakarta.inject.Singleton;
 public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryRepository categories;
+    private final ProductRepository products;
 
-    public CategoryServiceImpl(CategoryRepository categories) {
+    public CategoryServiceImpl(CategoryRepository categories, ProductRepository products) {
         this.categories = categories;
+        this.products = products;
     }
 
     @Override
@@ -59,9 +62,9 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     public void delete(Long id) {
         Category category = load(id);
-        long products = categories.countProductsByCategoryId(id);
-        if (products > 0) {
-            throw new BusinessRuleException("Category " + id + " still has " + products + " product(s) and cannot be deleted");
+        long productCount = products.countByCategoryId(id);
+        if (productCount > 0) {
+            throw new BusinessRuleException("Category " + id + " still has " + productCount + " product(s) and cannot be deleted");
         }
         categories.delete(category);
     }
