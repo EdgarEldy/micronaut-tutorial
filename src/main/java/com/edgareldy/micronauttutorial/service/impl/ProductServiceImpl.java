@@ -7,6 +7,7 @@ import com.edgareldy.micronauttutorial.entity.Product;
 import com.edgareldy.micronauttutorial.exception.BusinessRuleException;
 import com.edgareldy.micronauttutorial.exception.ResourceNotFoundException;
 import com.edgareldy.micronauttutorial.repository.CategoryRepository;
+import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.edgareldy.micronauttutorial.service.ProductService;
 import io.micronaut.cache.annotation.CacheInvalidate;
@@ -30,10 +31,12 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository products;
     private final CategoryRepository categories;
+    private final OrderRepository orders;
 
-    public ProductServiceImpl(ProductRepository products, CategoryRepository categories) {
+    public ProductServiceImpl(ProductRepository products, CategoryRepository categories, OrderRepository orders) {
         this.products = products;
         this.categories = categories;
+        this.orders = orders;
     }
 
     @Override
@@ -69,7 +72,12 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public void delete(Long id) {
-        products.delete(load(id));
+        Product product = load(id);
+        long orderCount = orders.countByProductId(id);
+        if (orderCount > 0) {
+            throw new BusinessRuleException("Product " + id + " is referenced by " + orderCount + " order(s) and cannot be deleted");
+        }
+        products.delete(product);
     }
 
     private void requireCategory(Long categoryId) {
