@@ -10,6 +10,8 @@ import com.edgareldy.micronauttutorial.repository.CustomerRepository;
 import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.edgareldy.micronauttutorial.service.impl.OrderServiceImpl;
+import com.edgareldy.micronauttutorial.event.OrderCreatedEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.data.model.Page;
 import io.micronaut.data.model.Pageable;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +29,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -46,14 +50,17 @@ class OrderServiceImplTest {
     private OrderRepository orders;
     private CustomerRepository customers;
     private ProductRepository products;
+    private ApplicationEventPublisher<OrderCreatedEvent> events;
     private OrderServiceImpl service;
 
+    @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
         orders = mock(OrderRepository.class);
         customers = mock(CustomerRepository.class);
         products = mock(ProductRepository.class);
-        service = new OrderServiceImpl(orders, customers, products);
+        events = mock(ApplicationEventPublisher.class);
+        service = new OrderServiceImpl(orders, customers, products, events);
         when(customers.existsById(1L)).thenReturn(true);
         when(orders.save(any(Order.class))).thenAnswer(returnsFirstArg());
     }
@@ -134,6 +141,33 @@ class OrderServiceImplTest {
 
         assertEquals("Product 88 does not exist", e.getMessage());
         verify(orders, never()).save(any());
+    }
+
+    // The event carries the created OrderResponse and is published exactly once per successful create.
+    @Test
+    void aSuccessfulCreatePublishesExactlyOneEventWithTheCreatedOrder() {
+        productPrice("10.50");
+
+        OrderResponse response = create(3);
+
+        ArgumentCaptor<OrderCreatedEvent> published = ArgumentCaptor.forClass(OrderCreatedEvent.class);
+        verify(events, times(1)).publishEvent(published.capture());
+        assertEquals(response, published.getValue().order());
+        assertEquals(new BigDecimal("31.50"), published.getValue().order().total());
+    }
+
+    @Test
+    void aRefusedCreatePublishesNothing() {
+        when(customers.existsById(99L)).thenReturn(false);
+        assertThrows(BusinessRuleException.class, () -> service.create(new OrderRequest(99L, 2L, 1)));
+
+        when(products.findById(88L)).thenReturn(Optional.empty());
+        assertThrows(BusinessRuleException.class, () -> service.create(new OrderRequest(1L, 88L, 1)));
+
+        productPrice("10000000.00");
+        assertThrows(BusinessRuleException.class, () -> create(100000));
+
+        verifyNoInteractions(events);
     }
 
     @Test

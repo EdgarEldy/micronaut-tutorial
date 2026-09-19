@@ -11,6 +11,8 @@ import com.edgareldy.micronauttutorial.repository.CustomerRepository;
 import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.edgareldy.micronauttutorial.service.OrderService;
+import com.edgareldy.micronauttutorial.event.OrderCreatedEvent;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import io.micronaut.data.model.Page;
 import io.micronaut.data.model.Pageable;
 import io.micronaut.data.model.Sort;
@@ -38,11 +40,14 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orders;
     private final CustomerRepository customers;
     private final ProductRepository products;
+    private final ApplicationEventPublisher<OrderCreatedEvent> events;
 
-    public OrderServiceImpl(OrderRepository orders, CustomerRepository customers, ProductRepository products) {
+    public OrderServiceImpl(OrderRepository orders, CustomerRepository customers, ProductRepository products,
+                            ApplicationEventPublisher<OrderCreatedEvent> events) {
         this.orders = orders;
         this.customers = customers;
         this.products = products;
+        this.events = events;
     }
 
     @Override
@@ -81,7 +86,10 @@ public class OrderServiceImpl implements OrderService {
         if (total.compareTo(TOTAL_LIMIT) >= 0) {
             throw new BusinessRuleException("Order total " + total.toPlainString() + " is too large");
         }
-        return toResponse(orders.save(new Order(request.customerId(), request.productId(), request.quantity(), total)));
+        OrderResponse created = toResponse(orders.save(new Order(request.customerId(), request.productId(), request.quantity(), total)));
+        // Published inside the transaction: the transactional listener only sees it after a successful commit.
+        events.publishEvent(new OrderCreatedEvent(created));
+        return created;
     }
 
     private static OrderResponse toResponse(Order order) {

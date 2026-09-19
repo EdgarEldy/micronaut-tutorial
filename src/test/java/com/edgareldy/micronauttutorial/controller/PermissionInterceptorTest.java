@@ -153,6 +153,18 @@ class PermissionInterceptorTest {
         assertError(RbacTestSupport.as(writeOnly.token()).get("/api/v1/roles").then(), 403);
     }
 
+    // Regression for PermissionInterceptor.getOrder() (it now runs before validation so a Publisher route answers a
+    // synchronous 403): a plain route keeps its 403 "Access denied" ApiResponse, also when the parameters are invalid.
+    @Test
+    void aNonPublisherRouteStillAnswers403AheadOfParameterValidation() {
+        Actor unrelated = rbac.actor("CATEGORY:READ");
+
+        assertError(RbacTestSupport.as(unrelated.token()).get("/api/v1/orders/1").then(), 403)
+                .body("message", equalTo("Access denied"));
+        assertError(RbacTestSupport.as(unrelated.token()).queryParam("size", 0).get("/api/v1/orders").then(), 403)
+                .body("message", equalTo("Access denied"));
+    }
+
     // The permission check is Micronaut compile-time AOP: the annotation processor generates a subclass of each
     // controller ($X$Definition$Intercepted) with the interceptor calls inlined. No JDK/CGLIB proxy is created
     // at startup, and the bean the container hands out is an instance of that generated class.

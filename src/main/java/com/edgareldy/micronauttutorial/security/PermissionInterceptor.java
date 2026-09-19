@@ -2,6 +2,7 @@ package com.edgareldy.micronauttutorial.security;
 
 import com.edgareldy.micronauttutorial.exception.AuthenticationFailedException;
 import com.edgareldy.micronauttutorial.exception.ForbiddenException;
+import io.micronaut.aop.InterceptPhase;
 import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.security.authentication.Authentication;
@@ -35,6 +36,16 @@ public class PermissionInterceptor implements MethodInterceptor<Object, Object> 
 
     public PermissionInterceptor(SecurityService securityService) {
         this.securityService = securityService;
+    }
+
+    // Runs just before the validation interceptor (which is otherwise the outer one). On a method returning a
+    // Publisher, ValidatingInterceptor defers the rest of the chain to subscription time, and an error signalled
+    // through the Publisher bypasses the ExceptionHandler beans (500 instead of the 403 ApiResponse). Checked first,
+    // the permission is refused with a plain synchronous throw, before any stream exists. It also means a caller
+    // without the permission gets 403 rather than a validation error.
+    @Override
+    public int getOrder() {
+        return InterceptPhase.VALIDATE.getPosition() - 1;
     }
 
     @Override
