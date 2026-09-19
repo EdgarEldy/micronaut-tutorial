@@ -49,6 +49,12 @@
     </dependency>
 
     <dependency>
+      <groupId>io.micronaut.reactor</groupId>
+      <artifactId>micronaut-reactor</artifactId>
+      <scope>compile</scope>
+    </dependency>
+
+    <dependency>
       <groupId>io.micronaut.cache</groupId>
       <artifactId>micronaut-cache-caffeine</artifactId>
       <scope>compile</scope>
