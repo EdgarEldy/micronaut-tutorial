@@ -69,10 +69,14 @@ jobs:
           cache: maven
 
       - name: Package the JVM application
-        run: ./mvnw -B package -DskipTests
+        run: |
+          ./mvnw -B clean package -DskipTests
+          # Kept apart: the native build starts from a clean target, because the shaded JVM jar merges the
+          # native-image metadata of every library and must not be on the native build's classpath.
+          mkdir -p "$RUNNER_TEMP/jvm" && cp target/micronaut-tutorial-0.1.jar "$RUNNER_TEMP/jvm/app.jar"
 
       - name: Build the native executable
-        run: ./mvnw -B package -Dpackaging=native-image -DskipTests
+        run: ./mvnw -B clean package -Dpackaging=native-image -DskipTests
 
       # The same scenario against both builds: what compile-time Micronaut generated must still work once
       # GraalVM has closed the world (AOP interceptor, JWT validators, Micronaut Data, Flyway, cache).
@@ -81,7 +85,7 @@ jobs:
           APP_BOOTSTRAP_ADMIN_EMAIL: ci-admin@example.com
           APP_BOOTSTRAP_ADMIN_PASSWORD: ci-only-admin-password
         run: |
-          scripts/smoke-test.sh jvm java -jar target/micronaut-tutorial-0.1.jar
+          scripts/smoke-test.sh jvm java -jar "$RUNNER_TEMP/jvm/app.jar"
           # Both runs share the database: the users created by the first run must not collide.
           scripts/smoke-test.sh native target/micronaut-tutorial
 
@@ -90,7 +94,7 @@ jobs:
           {
             echo "| Mode | Ready after (ms) | Reported startup (ms) | RSS after load (MB) |"
             echo "|---|---|---|---|"
-            scripts/measure-startup.sh jvm java -jar target/micronaut-tutorial-0.1.jar
+            scripts/measure-startup.sh jvm java -jar "$RUNNER_TEMP/jvm/app.jar"
             scripts/measure-startup.sh native target/micronaut-tutorial
           } | tee -a "$GITHUB_STEP_SUMMARY"
           ls -l target/micronaut-tutorial
