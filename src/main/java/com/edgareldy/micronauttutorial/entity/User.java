@@ -4,12 +4,19 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Account of the identity domain, mapped onto the users table. Created disabled and activated by token.
- * The password field only ever holds a BCrypt hash. Roles are not mapped here: they arrive with feature/rbac.
+ * The password field only ever holds a BCrypt hash. It owns the role_user link: roles are assigned onto a user, never the reverse.
  * <p>
  * Created edgar.muhamyangabo on 9/19/26
  * Author : edgar.muhamyangabo
@@ -41,6 +48,14 @@ public class User {
 
     @Column(name = "account_locked", nullable = false)
     private boolean accountLocked = false;
+
+    // Owning side of the users/roles many-to-many (Role has no back reference to its users). Lazy: read it
+    // inside a @Transactional service and map it to a DTO there.
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "role_user",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id"))
+    private Set<Role> roles = new HashSet<>();
 
     public User() {
     }
@@ -106,6 +121,14 @@ public class User {
 
     public void setAccountLocked(boolean accountLocked) {
         this.accountLocked = accountLocked;
+    }
+
+    public Set<Role> getRoles() {
+        return roles;
+    }
+
+    public void setRoles(Set<Role> roles) {
+        this.roles = roles;
     }
 
     @Override
