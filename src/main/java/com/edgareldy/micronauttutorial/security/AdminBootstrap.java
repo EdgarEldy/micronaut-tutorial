@@ -50,12 +50,18 @@ public class AdminBootstrap implements ApplicationEventListener<ServerStartupEve
     }
 
     @Override
-    @Transactional
     public void onApplicationEvent(ServerStartupEvent event) {
-        bootstrap();
+        try {
+            bootstrap();
+        } catch (RuntimeException e) {
+            // An exception escaping a startup listener aborts the whole application. Losing a race with
+            // another instance that just created the same account must not do that: log and carry on.
+            LOG.warn("Bootstrap admin not created: {}", e.getMessage());
+        }
     }
 
     /** Creates the administrator when configured and absent. Returns true if an account was created. */
+    @Transactional
     boolean bootstrap() {
         if (!properties.isConfigured()) {
             return false;
