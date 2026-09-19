@@ -23,6 +23,7 @@ This document is the **complete specification** of the project: it is meant to b
 - [feature/products](#featureproducts)
 - [feature/customers](#featurecustomers)
 - [feature/orders](#featureorders)
+- [feature/reactive-endpoints (bonus)](#featurereactive-endpoints-bonus)
 - [Order of work](#order-of-work)
 - [Code conventions](#code-conventions)
 - [Concepts covered](#concepts-covered)
@@ -131,6 +132,7 @@ customers (id, first_name, last_name, telephone, email, address)
 | `feature/products` | Product CRUD, depends on `categories`. |
 | `feature/customers` | Customer CRUD. |
 | `feature/orders` | Order create/read (orders are immutable), depends on `products`/`customers`. |
+| `feature/reactive-endpoints` | Bonus: live stream of created orders (Server-Sent Events), Reactor `Flux`, events published only after commit. |
 
 ## Project structure
 
@@ -365,6 +367,25 @@ Depends on `feature/categories` existing, since every product references one.
 - [x] `OrderController`
 - [x] Tests, including the total computation
 
+## feature/reactive-endpoints (bonus)
+
+Micronaut's HTTP server is built on Netty and speaks Reactive Streams natively: a controller method can return a `Publisher` (or a Reactor `Flux`) and the framework streams it. This branch adds one such endpoint on top of the blocking JPA layer, without a reactive database driver: the data access stays exactly as it is, only the delivery of new orders to clients becomes reactive.
+
+### Endpoints
+
+| Method | URL | Description | Access |
+|---|---|---|---|
+| GET | `/api/v1/orders/stream` | Server-Sent Events (`text/event-stream`): one event per order created after the client connected, optionally filtered by `customerId`/`productId` | `@RequiresPermission(ORDER, READ)` |
+
+### Tasks
+
+- [ ] `OrderCreatedEvent` (immutable event carrying the `OrderResponse`) published by `OrderService.create` through Micronaut's `ApplicationEventPublisher`
+- [ ] `OrderEventBroadcaster`: a `@TransactionalEventListener` (after commit only) feeding a Reactor `Sinks.Many` multicast sink, so an order rolled back is never broadcast; slow subscribers drop events instead of blocking the writer
+- [ ] `OrderController.stream`: returns a `Flux` of Server-Sent Events, protected by the same declarative permission as the other order reads, with the optional filters
+- [ ] Tests: an event arrives on a connected stream after `POST /api/v1/orders`, filters, a rolled-back order is never broadcast, a client without `ORDER:READ` gets 403 and one without a token 401, and several concurrent subscribers all receive the event
+
+The database stays PostgreSQL through blocking JPA on Micronaut's I/O executor. A reactive driver (R2DBC) is deliberately not introduced: it would need a second datasource and would not change what this branch teaches.
+
 ## Order of work
 
 1. `feature/core-architecture` → Pull Request to `develop`
@@ -374,7 +395,8 @@ Depends on `feature/categories` existing, since every product references one.
 5. `feature/products` (depends on `categories`) → Pull Request to `develop`
 6. `feature/customers` (depends on `rbac`) → Pull Request to `develop`
 7. `feature/orders` (depends on `products`, `customers`) → Pull Request to `develop`
-8. `develop` → `master`
+8. `feature/reactive-endpoints` (bonus, depends on `orders`) → Pull Request to `develop`
+9. `develop` → `master`
 
 ## Code conventions
 
@@ -403,6 +425,7 @@ Depends on `feature/categories` existing, since every product references one.
 - Audit logging as a first-class concern for every sensitive RBAC mutation
 - Testing with `@MicronautTest` and REST Assured, without manual Testcontainers setup
 - Containerization (Docker, docker-compose)
+- Reactive endpoints: Reactor `Flux`, Server-Sent Events and transaction-bound application events
 - Continuous integration (GitHub Actions)
 
 ## How to follow this tutorial
