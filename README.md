@@ -130,7 +130,7 @@ customers (id, first_name, last_name, telephone, email, address)
 | `feature/categories` | Category CRUD. |
 | `feature/products` | Product CRUD, depends on `categories`. |
 | `feature/customers` | Customer CRUD. |
-| `feature/orders` | Order CRUD, depends on `products`/`customers`. |
+| `feature/orders` | Order create/read (orders are immutable), depends on `products`/`customers`. |
 
 ## Project structure
 
@@ -361,9 +361,9 @@ Depends on `feature/categories` existing, since every product references one.
 
 ### Tasks
 
-- [ ] `Order` entity, repository, contract/implementation service: computes `total = quantity * product.unitPrice`
-- [ ] `OrderController`
-- [ ] Tests, including the total computation
+- [x] `Order` entity, repository, contract/implementation service: computes `total = quantity * product.unitPrice` (scale 2, `HALF_UP`, frozen in the order row: a later price change does not alter existing orders; a total that does not fit `NUMERIC(14,2)` is a 422). `Order` is a JPQL keyword, so the entity is declared `@Entity(name = "CustomerOrder")` on the `orders` table. Deleting a product or a customer that still has orders is refused with a 422
+- [x] `OrderController`
+- [x] Tests, including the total computation
 
 ## Order of work
 
