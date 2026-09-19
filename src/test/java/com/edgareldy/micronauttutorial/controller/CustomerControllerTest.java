@@ -141,6 +141,14 @@ class CustomerControllerTest {
 
     // The DTO documents that a blank optional means absent, so an empty email must be stored as null, not rejected.
     @Test
+    void createAcceptsAnEmailWithSurroundingWhitespaceAndTrimsIt() {
+        Map<String, Object> body = body(uniqueLastName());
+        body.put("email", "  padded@example.com  ");
+        asJson(writer.token()).body(body).post(CUSTOMERS).then()
+                .statusCode(201).body("data.email", equalTo("padded@example.com"));
+    }
+
+    @Test
     void createTurnsAnEmptyEmailIntoNull() {
         Map<String, Object> m = body(uniqueLastName());
         m.put("email", "");

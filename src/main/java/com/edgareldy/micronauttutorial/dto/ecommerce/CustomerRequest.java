@@ -20,7 +20,7 @@ public record CustomerRequest(
         @Size(max = 50, message = "must be at most 50 characters") String telephone,
         // @Email would reject an empty string, but a blank optional value means "absent" here (the service turns it
         // into null), so the pattern accepts either blank text or something shaped like an address.
-        @Pattern(regexp = "^\\s*$|^[^@\\s]+@[^@\\s]+$", message = "must be a valid email address") @Size(max = 255, message = "must be at most 255 characters") String email,
+        @Pattern(regexp = "^\\s*$|^\\s*[^@\\s]+@[^@\\s]+\\s*$", message = "must be a valid email address") @Size(max = 255, message = "must be at most 255 characters") String email,
         @Size(max = 255, message = "must be at most 255 characters") String address
 ) {
 }
