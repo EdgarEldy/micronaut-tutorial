@@ -7,6 +7,7 @@ import com.edgareldy.micronauttutorial.entity.Product;
 import com.edgareldy.micronauttutorial.exception.BusinessRuleException;
 import com.edgareldy.micronauttutorial.exception.ResourceNotFoundException;
 import com.edgareldy.micronauttutorial.repository.CategoryRepository;
+import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.edgareldy.micronauttutorial.service.impl.ProductServiceImpl;
 import io.micronaut.data.model.Page;
@@ -48,7 +49,7 @@ class ProductServiceImplTest {
     void setUp() {
         products = mock(ProductRepository.class);
         categories = mock(CategoryRepository.class);
-        service = new ProductServiceImpl(products, categories);
+        service = new ProductServiceImpl(products, categories, mock(OrderRepository.class));
         product = new Product(1L, "Pen", new BigDecimal("2.50"));
         product.setId(7L);
     }

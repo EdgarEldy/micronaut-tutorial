@@ -5,6 +5,7 @@ import com.edgareldy.micronauttutorial.dto.ecommerce.ProductResponse;
 import com.edgareldy.micronauttutorial.entity.Product;
 import com.edgareldy.micronauttutorial.exception.BusinessRuleException;
 import com.edgareldy.micronauttutorial.repository.CategoryRepository;
+import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.github.benmanes.caffeine.cache.Cache;
 import io.micronaut.cache.SyncCache;
@@ -65,6 +66,11 @@ class ProductServiceCacheTest {
     @MockBean(ProductRepository.class)
     ProductRepository productRepository() {
         return mock(ProductRepository.class);
+    }
+
+    @MockBean(OrderRepository.class)
+    OrderRepository orderRepository() {
+        return mock(OrderRepository.class);
     }
 
     @MockBean(CategoryRepository.class)

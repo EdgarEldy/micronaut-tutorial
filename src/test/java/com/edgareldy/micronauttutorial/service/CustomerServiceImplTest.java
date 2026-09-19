@@ -5,6 +5,7 @@ import com.edgareldy.micronauttutorial.dto.ecommerce.CustomerResponse;
 import com.edgareldy.micronauttutorial.entity.Customer;
 import com.edgareldy.micronauttutorial.exception.ResourceNotFoundException;
 import com.edgareldy.micronauttutorial.repository.CustomerRepository;
+import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.service.impl.CustomerServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,7 +38,7 @@ class CustomerServiceImplTest {
     @BeforeEach
     void setUp() {
         customers = mock(CustomerRepository.class);
-        service = new CustomerServiceImpl(customers);
+        service = new CustomerServiceImpl(customers, mock(OrderRepository.class));
         customer = new Customer("Old", "Name", "1", "old@example.com", "Old street");
         customer.setId(7L);
     }
