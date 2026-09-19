@@ -28,8 +28,9 @@ USER micronaut
 
 COPY --from=build --chown=micronaut /build/target/micronaut-tutorial ./application
 # The prod environment turns on application-prod.yml: database and JWT key locations come from the
-# environment, with no default.
-ENV MICRONAUT_ENVIRONMENTS=prod
+# environment, with no default. The native environment adds application-native.yml (no run-time bytecode
+# generation, which a native image cannot do).
+ENV MICRONAUT_ENVIRONMENTS=prod,native
 
 EXPOSE 8080
 ENTRYPOINT ["./application"]
