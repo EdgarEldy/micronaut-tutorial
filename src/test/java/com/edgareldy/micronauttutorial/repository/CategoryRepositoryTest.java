@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Repository tests of CategoryRepository against the Test Resources PostgreSQL: save and find, id ordered
- * pagination and the native product count.
+ * pagination, and the product count of a category through ProductRepository.countByCategoryId.
  * <p>
  * Created edgar.muhamyangabo on 9/19/26
  * Author : edgar.muhamyangabo
@@ -32,6 +32,9 @@ class CategoryRepositoryTest {
 
     @Inject
     CategoryRepository categories;
+
+    @Inject
+    ProductRepository products;
 
     @Inject
     ConnectionOperations<Connection> connections;
@@ -83,13 +86,13 @@ class CategoryRepositoryTest {
         Category other = categories.save(new Category(uniqueName()));
         TestDatabase db = new TestDatabase(connections);
 
-        assertEquals(0, categories.countProductsByCategoryId(category.getId()));
+        assertEquals(0, products.countByCategoryId(category.getId()));
 
         for (int i = 0; i < 2; i++) {
             db.execute("INSERT INTO products (category_id, product_name, unit_price) VALUES (?, ?, 5.00)",
                     category.getId(), uniqueName());
         }
-        assertEquals(2, categories.countProductsByCategoryId(category.getId()));
-        assertEquals(0, categories.countProductsByCategoryId(other.getId()));
+        assertEquals(2, products.countByCategoryId(category.getId()));
+        assertEquals(0, products.countByCategoryId(other.getId()));
     }
 }

@@ -6,6 +6,7 @@ import com.edgareldy.micronauttutorial.entity.Category;
 import com.edgareldy.micronauttutorial.exception.BusinessRuleException;
 import com.edgareldy.micronauttutorial.exception.ResourceNotFoundException;
 import com.edgareldy.micronauttutorial.repository.CategoryRepository;
+import com.edgareldy.micronauttutorial.repository.ProductRepository;
 import com.edgareldy.micronauttutorial.service.impl.CategoryServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,13 +34,15 @@ import static org.mockito.Mockito.when;
 class CategoryServiceImplTest {
 
     private CategoryRepository categories;
+    private ProductRepository products;
     private CategoryServiceImpl service;
     private Category category;
 
     @BeforeEach
     void setUp() {
         categories = mock(CategoryRepository.class);
-        service = new CategoryServiceImpl(categories);
+        products = mock(ProductRepository.class);
+        service = new CategoryServiceImpl(categories, products);
         category = new Category("Books");
         category.setId(7L);
     }
@@ -47,7 +50,7 @@ class CategoryServiceImplTest {
     @Test
     void deleteIsRefusedAndNeverDeletesWhileProductsRemain() {
         when(categories.findById(7L)).thenReturn(Optional.of(category));
-        when(categories.countProductsByCategoryId(7L)).thenReturn(3L);
+        when(products.countByCategoryId(7L)).thenReturn(3L);
 
         BusinessRuleException e = assertThrows(BusinessRuleException.class, () -> service.delete(7L));
 
@@ -58,7 +61,7 @@ class CategoryServiceImplTest {
     @Test
     void deleteIsAllowedWhenNoProductRemains() {
         when(categories.findById(7L)).thenReturn(Optional.of(category));
-        when(categories.countProductsByCategoryId(7L)).thenReturn(0L);
+        when(products.countByCategoryId(7L)).thenReturn(0L);
 
         service.delete(7L);
 
