@@ -5,11 +5,12 @@ import com.edgareldy.micronauttutorial.dto.common.PageResponse;
 import com.edgareldy.micronauttutorial.dto.ecommerce.OrderRequest;
 import com.edgareldy.micronauttutorial.dto.ecommerce.OrderResponse;
 import com.edgareldy.micronauttutorial.security.RequiresPermission;
-import com.edgareldy.micronauttutorial.service.OrderService;
 import com.edgareldy.micronauttutorial.event.OrderEventBroadcaster;
+import com.edgareldy.micronauttutorial.security.TokenExpiry;
+import com.edgareldy.micronauttutorial.service.OrderService;
 import io.micronaut.http.HttpResponse;
-import io.micronaut.http.MediaType;
 import io.micronaut.http.HttpStatus;
+import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
@@ -18,6 +19,7 @@ import io.micronaut.http.annotation.Produces;
 import io.micronaut.http.annotation.QueryValue;
 import io.micronaut.http.sse.Event;
 import io.micronaut.security.annotation.Secured;
+import io.micronaut.security.authentication.Authentication;
 import io.micronaut.security.rules.SecurityRule;
 import io.micronaut.validation.Validated;
 import jakarta.annotation.Nullable;
@@ -28,6 +30,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Orders under /api/v1/orders: paginated list (optional customerId and productId filters), detail and creation.
@@ -42,9 +45,9 @@ import java.time.Duration;
 @Secured(SecurityRule.IS_AUTHENTICATED)
 public class OrderController {
 
-    private final OrderService orderService;
     private static final Duration HEARTBEAT_PERIOD = Duration.ofSeconds(15);
 
+    private final OrderService orderService;
     private final OrderEventBroadcaster broadcaster;
 
     public OrderController(OrderService orderService, OrderEventBroadcaster broadcaster) {
@@ -71,7 +74,8 @@ public class OrderController {
     @RequiresPermission(resource = "ORDER", action = "READ")
     public Flux<Event<ApiResponse<OrderResponse>>> stream(
             @QueryValue @Nullable Long customerId,
-            @QueryValue @Nullable Long productId) {
+            @QueryValue @Nullable Long productId,
+            Authentication authentication) {
         Flux<Event<ApiResponse<OrderResponse>>> orders = broadcaster.stream()
                 .filter(order -> customerId == null || customerId.equals(order.customerId()))
                 .filter(order -> productId == null || productId.equals(order.productId()))
@@ -80,7 +84,11 @@ public class OrderController {
         // created, then one every 15 seconds keeps idle connections open through proxies.
         Flux<Event<ApiResponse<OrderResponse>>> heartbeat = Flux.interval(Duration.ZERO, HEARTBEAT_PERIOD)
                 .map(tick -> Event.of(ApiResponse.<OrderResponse>success(null, "heartbeat")).name("heartbeat"));
-        return Flux.merge(orders, heartbeat);
+        // The permission and the token are only checked when the client connects. A stream that outlived its token
+        // would keep pushing orders to someone who is no longer authenticated, so it ends when the token expires
+        // and the client has to reconnect (and be authenticated again) with a fresh one.
+        Duration untilExpiry = Duration.between(Instant.now(), TokenExpiry.of(authentication));
+        return Flux.merge(orders, heartbeat).take(untilExpiry.isNegative() ? Duration.ZERO : untilExpiry);
     }
 
     @Get("/{id}")
