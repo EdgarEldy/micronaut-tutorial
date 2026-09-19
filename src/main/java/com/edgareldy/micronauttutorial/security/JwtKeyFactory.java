@@ -10,6 +10,7 @@ import jakarta.inject.Singleton;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateKey;
@@ -65,7 +66,13 @@ public class JwtKeyFactory {
         }
         try (InputStream in = resolver.getResourceAsStream(location).orElseThrow(() ->
                 new IllegalStateException("JWT key file not found: " + location + " (from " + property + ")"))) {
-            String pem = new String(in.readAllBytes()).replaceAll("-----[A-Z ]+-----", "").replaceAll("\\s", "");
+            String content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            if (content.contains("BEGIN RSA PRIVATE KEY")) {
+                throw new IllegalStateException("Unsupported key format at " + location + " (from " + property
+                        + "): a PKCS#1 'BEGIN RSA PRIVATE KEY' file was given, convert it with"
+                        + " 'openssl pkcs8 -topk8 -nocrypt' to a PKCS#8 'BEGIN PRIVATE KEY' file");
+            }
+            String pem = content.replaceAll("-----[A-Z ]+-----", "").replaceAll("\\s", "");
             byte[] der = Base64.getDecoder().decode(pem);
             KeyFactory kf = KeyFactory.getInstance("RSA");
             return isPrivate ? kf.generatePrivate(new PKCS8EncodedKeySpec(der))
