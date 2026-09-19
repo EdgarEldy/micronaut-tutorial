@@ -305,10 +305,10 @@ Full CRUD for users, roles, and permissions. Assignments always flow in one dire
 
 ### Tasks
 
-- [ ] `Category` entity, repository, contract/implementation service
-- [ ] Business rule: deleting a category that still has products is rejected (`BusinessRuleException` → 422)
-- [ ] `CategoryController`
-- [ ] Tests for every endpoint, including the rejection case and a permission-denied case
+- [x] `Category` entity, repository, contract/implementation service
+- [x] Business rule: deleting a category that still has products is rejected (`BusinessRuleException` → 422)
+- [x] `CategoryController`
+- [x] Tests for every endpoint, including the rejection case and a permission-denied case
 
 ## feature/products
 
