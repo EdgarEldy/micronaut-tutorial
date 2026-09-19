@@ -277,19 +277,19 @@ Full CRUD for users, roles, and permissions. Assignments always flow in one dire
 
 ### Tasks
 
-- [ ] `Role`, `Permission`, `AuditLog` entities, `RoleRepository`, `PermissionRepository`, `AuditLogRepository`
-- [ ] `RbacService` (interface) + implementation:
+- [x] `Role`, `Permission`, `AuditLog` entities, `RoleRepository`, `PermissionRepository`, `AuditLogRepository`
+- [x] `RbacService` (interface) + implementation:
   - `createRole`/`updateRole`/`deleteRole` - `deleteRole` rejects if any user is still assigned this role
   - `createPermission`/`updatePermission`/`deletePermission` - `deletePermission` rejects if any role still has this permission assigned
-  - `assignPermissionToRole`/`removePermissionFromRole` - rejects removing `ROLE:WRITE` from a role if it would leave **zero** users anywhere holding a role that grants `ROLE:WRITE`
+  - `assignPermissionToRole`/`removePermissionFromRole` - rejects removing `ROLE:WRITE` from a role if it would leave **zero** users anywhere holding a role that grants `ROLE:WRITE`. Only enabled, unlocked accounts count as holders, and a PostgreSQL transaction advisory lock (`pg_advisory_xact_lock`) serialises every operation that can remove one (also `removeRoleFromUser` and an `updatePermission` that alters `ROLE:WRITE`). Because permissions travel inside the JWT, a user stripped of a role keeps that access in an already issued token until it expires: the rule is about database state, not live tokens
   - `assignRoleToUser`/`removeRoleFromUser` - the same last-admin check applied at the point of removal from a specific user
-- [ ] `AuditLogger`: a single `log(String action, String entityType, Long entityId, String details)` method, called from every method above
-- [ ] `RequiresPermission` annotation (`resource`, `action` attributes, meta-annotated `@Around`)
-- [ ] `PermissionInterceptor` (`MethodInterceptor<Object, Object>`): reads the resolved permissions from the authenticated `SecurityService`'s claims, compares against the intercepted method's `@RequiresPermission`, proceeds or returns 403
-- [ ] `UserController`, `RoleController`, `PermissionController`, each protected method annotated `@RequiresPermission` as listed above - `UserController` only manages role assignment on existing users, never user creation directly (registration stays exclusively `feature/auth`'s job)
-- [ ] A seeding step (a Flyway data-migration, or a `@EventListener(StartupEvent.class)` bean): baseline permissions covering every resource/action this project defines, assigned to a seeded `ADMIN` role - without this, nobody could ever be granted `ROLE:WRITE`/`PERMISSION:WRITE` to create the first assignment
-- [ ] `ExpiredTokenCleanupJob` (`@Scheduled(cron = "0 0 3 * * *")`): daily job deleting `BlacklistedToken`/`ActivationToken`/`PasswordResetToken` rows past their expiry
-- [ ] Tests: full CRUD on roles and permissions, the "still referenced" rejection on both `deleteRole` and `deletePermission`, `PermissionInterceptor` allowing/denying correctly, and specifically the last-admin rejection triggered both ways, plus an assertion that every mutation above produces a matching `AuditLog` row
+- [x] `AuditLogger`: `log(String action, String entityType, Long entityId, String details)`, called from every method above and joining the business transaction, plus `logRejected(...)` for refusals, written in an independent transaction (`REQUIRES_NEW`) so the refusal row survives the rollback of the rejected change
+- [x] `RequiresPermission` annotation (`resource`, `action` attributes, meta-annotated `@Around`)
+- [x] `PermissionInterceptor` (`MethodInterceptor<Object, Object>`): reads the `permissions` claim from the `Authentication` that `SecurityService` exposes, compares it against the intercepted method's `@RequiresPermission`, and either proceeds or throws `ForbiddenException` (rendered as a 403 `ApiResponse` by `GlobalExceptionHandler`)
+- [x] `UserController`, `RoleController`, `PermissionController`, each protected method annotated `@RequiresPermission` as listed above - `UserController` only manages role assignment on existing users, never user creation directly (registration stays exclusively `feature/auth`'s job)
+- [x] A seeding step: Flyway migration `V2__seed_baseline_rbac.sql` (14 baseline permissions covering every resource/action this project defines, assigned to a seeded `ADMIN` role - without this, nobody could ever be granted `ROLE:WRITE`/`PERMISSION:WRITE` to create the first assignment), plus an optional `AdminBootstrap` (`ServerStartupEvent` listener) that creates a first enabled administrator when `app.bootstrap-admin.email`/`password` are configured (dev profile only, with fake values)
+- [x] `ExpiredTokenCleanupJob` (`@Scheduled(cron = "0 0 3 * * *")`): daily job deleting `BlacklistedToken`/`ActivationToken`/`PasswordResetToken` rows past their expiry
+- [x] Tests: full CRUD on roles and permissions, the "still referenced" rejection on both `deleteRole` and `deletePermission`, `PermissionInterceptor` allowing/denying correctly, and specifically the last-admin rejection triggered both ways, plus an assertion that every mutation above produces a matching `AuditLog` row
 
 ## feature/categories
 
