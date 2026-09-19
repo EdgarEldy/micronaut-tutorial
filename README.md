@@ -326,10 +326,10 @@ Depends on `feature/categories` existing, since every product references one.
 
 ### Tasks
 
-- [ ] `Product` entity, repository, contract/implementation service
-- [ ] `ProductService.findById` annotated `@Cacheable("product-cache")`; `update`/`delete` annotated `@CacheInvalidate("product-cache")` on the same key
-- [ ] `ProductController`
-- [ ] Tests, including the category filter, a permission-denied case, and a cache invalidation test
+- [x] `Product` entity, repository, contract/implementation service
+- [x] `ProductService.findById` annotated `@Cacheable(value = "product-cache", parameters = "id")`; `update`/`delete` annotated `@CacheInvalidate(value = "product-cache", parameters = "id")` on the same key. The annotations work on the interface methods (verified). The default cache key is built from ALL parameters, so `parameters = "id"` is required: without it `update(id, request)` would never evict the entry cached by `findById(id)`. Only the `ProductResponse` DTO is cached (never an entity, and no category name, which a category rename would leave stale); the cache is bounded (500 entries, 10 minutes)
+- [x] `ProductController`
+- [x] Tests, including the category filter, a permission-denied case, and a cache invalidation test
 
 ## feature/customers
 
