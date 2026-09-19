@@ -379,10 +379,12 @@ Micronaut's HTTP server is built on Netty and speaks Reactive Streams natively: 
 
 ### Tasks
 
-- [ ] `OrderCreatedEvent` (immutable event carrying the `OrderResponse`) published by `OrderService.create` through Micronaut's `ApplicationEventPublisher`
-- [ ] `OrderEventBroadcaster`: a `@TransactionalEventListener` (after commit only) feeding a Reactor `Sinks.Many` multicast sink, so an order rolled back is never broadcast; slow subscribers drop events instead of blocking the writer
-- [ ] `OrderController.stream`: returns a `Flux` of Server-Sent Events, protected by the same declarative permission as the other order reads, with the optional filters
-- [ ] Tests: an event arrives on a connected stream after `POST /api/v1/orders`, filters, a rolled-back order is never broadcast, a client without `ORDER:READ` gets 403 and one without a token 401, and several concurrent subscribers all receive the event
+- [x] `OrderCreatedEvent` (immutable event carrying the `OrderResponse`) published by `OrderService.create` through Micronaut's `ApplicationEventPublisher`
+- [x] `OrderEventBroadcaster`: a `@TransactionalEventListener` (after commit only) feeding a Reactor `Sinks.Many` multicast sink, so an order rolled back is never broadcast; slow subscribers drop events instead of blocking the writer
+- [x] `OrderController.stream`: returns a `Flux` of Server-Sent Events (`Event<ApiResponse<OrderResponse>>`, events named `order`), protected by the same declarative permission as the other order reads, with the optional filters. A `heartbeat` event is sent immediately and then every 15 seconds: without it the response headers would only leave with the first order. The client must send an SSE-compatible `Accept` header, otherwise `/stream` falls through to `/{id}`
+- [x] Tests: an event arrives on a connected stream after `POST /api/v1/orders`, filters, a rolled-back order is never broadcast, a client without `ORDER:READ` gets 403 and one without a token 401, and several concurrent subscribers all receive the event
+
+`reactor-core` comes with the new `micronaut-reactor` dependency. `PermissionInterceptor` declares an order so that it runs before the validation interceptor: on a method returning a `Publisher` the validation interceptor defers the rest of the chain to subscription time, and an error signalled through a `Publisher` bypasses the `ExceptionHandler` beans (a 500 instead of the 403 `ApiResponse`); run first, the refusal is a plain synchronous throw. As a consequence a caller lacking the permission now gets 403 before any parameter validation error.
 
 The database stays PostgreSQL through blocking JPA on Micronaut's I/O executor. A reactive driver (R2DBC) is deliberately not introduced: it would need a second datasource and would not change what this branch teaches.
 
