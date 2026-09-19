@@ -60,7 +60,7 @@ Micronaut has no framework-provided fine-grained permission annotation (its own 
 
 ## Micronaut Data: repositories with no hand-written implementation
 
-`@Repository` on an interface is enough - Micronaut Data's own annotation processor reads the method signatures (`findByEmail`, `findByCategoryId`, ...) at compile time and generates the SQL and the implementing class itself, the same way Spring Data does, except the implementation is real generated Java source inspectable in `build/generated`, not a runtime dynamic proxy. This tutorial never hand-writes a `*RepositoryImpl` class the way a framework without this capability would require - only the `service/impl/` layer (genuine business logic) follows the contract/implementation split described in [Code conventions](#code-conventions).
+`@Repository` on an interface is enough - Micronaut Data's own annotation processor reads the method signatures (`findByEmail`, `findByCategoryId`, ...) at compile time and generates the SQL and the implementing class itself, the same way Spring Data does, except the implementation is real generated Java source inspectable in `target/generated-sources/annotations`, not a runtime dynamic proxy. This tutorial never hand-writes a `*RepositoryImpl` class the way a framework without this capability would require - only the `service/impl/` layer (genuine business logic) follows the contract/implementation split described in [Code conventions](#code-conventions).
 
 ## Test Resources: why there's no manual Testcontainers setup
 
@@ -75,7 +75,7 @@ With `micronaut-test-resources-jdbc-postgresql` on the classpath and no datasour
 | Build | Maven |
 | HTTP | Micronaut HTTP Server (Netty), `@Controller`/`@Get`/`@Post`/... |
 | Database | PostgreSQL 16 (Test Resources in dev/test, Docker Compose for the packaged app) |
-| Data access | Micronaut Data JPA (`@Repository`, compile-time generated implementations) |
+| Data access | Micronaut Data JPA (`micronaut-data-hibernate-jpa`, `@Repository`, compile-time generated implementations) |
 | Migrations | Micronaut Flyway integration |
 | Validation | Micronaut Validation (Jakarta Bean Validation, compile-time processed) |
 | Security | `micronaut-security-jwt` (token issuance/validation), custom compile-time AOP for fine-grained permissions |
@@ -130,7 +130,7 @@ customers (id, first_name, last_name, telephone, email, address)
 | `feature/categories` | Category CRUD. |
 | `feature/products` | Product CRUD, depends on `categories`. |
 | `feature/customers` | Customer CRUD. |
-| `feature/orders` | Order CRUD, depends on `products`/`customers`. |
+| `feature/orders` | Order create/read (orders are immutable), depends on `products`/`customers`. |
 
 ## Project structure
 
@@ -167,11 +167,13 @@ micronaut-tutorial/
 │   │   │   │   └── PermissionInterceptor.java      (MethodInterceptor<Object, Object>)
 │   │   │   └── exception/
 │   │   │       ├── ResourceNotFoundException.java, BusinessRuleException.java
-│   │   │       └── GlobalExceptionHandler.java     (ExceptionHandler<Exception, HttpResponse<?>>)
+│   │   │       ├── GlobalExceptionHandler.java     (ExceptionHandler<Exception, HttpResponse<?>>)
+│   │   │       └── *ApiHandler.java                (@Replaces of the framework's more specific handlers, all delegating to GlobalExceptionHandler)
 │   │   └── resources/
 │   │       ├── application.yml
 │   │       ├── application-dev.yml
 │   │       ├── application-test.yml
+│   │       ├── application-prod.yml            (packaged app: datasource and JWT key paths from the environment)
 │   │       └── db/migration/
 │   │           └── V1__init_schema.sql
 │   └── test/
@@ -179,6 +181,7 @@ micronaut-tutorial/
 │           ├── controller/  (@MicronautTest + REST Assured)
 │           ├── service/     (Mockito)
 │           └── repository/  (@MicronautTest, Test Resources-backed PostgreSQL, no manual container setup)
+├── dev-keys/                             (development-only RSA key pair, deliberately outside src/main/resources)
 ├── docker-compose.yml
 ├── Dockerfile
 ├── .github/workflows/ci.yml
@@ -209,18 +212,20 @@ public record ApiResponse<T>(
 
 `GlobalExceptionHandler` (`ExceptionHandler<Exception, HttpResponse<?>>`, annotated `@Produces` + `@Singleton` + `@Requires(classes = Exception.class)`) maps `ResourceNotFoundException` to 404, Bean Validation failures to 400 (with per-field messages), `BusinessRuleException` to 422, and anything unmapped to 500 - always returning an `ApiResponse<Void>` with `success = false`.
 
+Micronaut picks the exception handler whose type is closest to the thrown exception, so the framework's own more specific handlers (`ConstraintExceptionHandler`, `HttpStatusHandler`, `NotAllowedExceptionHandler`, `ConversionErrorHandler`, `UnsatisfiedRouteHandler`, `UnsatisfiedArgumentHandler`, `JsonExceptionHandler`) would win over a handler for `Exception` and answer in the framework's own format. Each one is replaced (`@Replaces`) by a small handler delegating to the same mapping method of `GlobalExceptionHandler`, so validation errors, unknown routes (404), wrong methods (405), unsupported content types (415) and malformed JSON (400) all come back as an `ApiResponse` too. `micronaut.security.reject-not-found` is set to `false` so anonymous callers get those statuses instead of a 401. The 401/403 produced by Micronaut Security itself are handled in `feature/auth` and `feature/rbac`.
+
 ## feature/core-architecture
 
 ### Tasks
 
-- [ ] Generate the project via Micronaut Launch (`https://launch.micronaut.io`) or the `mn` CLI, Java 21, Maven, Micronaut Framework 4.x
-- [ ] Dependencies: `micronaut-http-server-netty`, `micronaut-data-jpa`, `micronaut-jdbc-hikari`, `postgresql` driver, `micronaut-flyway`, `micronaut-validation`, `micronaut-security-jwt`, `micronaut-openapi`, `micronaut-management`, `micronaut-cache-caffeine`
-- [ ] Test dependencies: `micronaut-test-junit5`, `rest-assured`, `micronaut-test-resources-jdbc-postgresql`
-- [ ] `ApiResponse<T>`, `PageResponse<T>`, `GlobalExceptionHandler`
-- [ ] Flyway script `V1__init_schema.sql` (all tables from both domains)
-- [ ] `application.yml`: JWT signing key location, Flyway enabled; `application-dev.yml`/`application-test.yml` left without a configured datasource (Test Resources provisions PostgreSQL automatically); a real connection string only under the packaged/production configuration
-- [ ] `docker-compose.yml` (app + PostgreSQL, for the packaged application only - not used in dev/test), `Dockerfile`
-- [ ] `.github/workflows/ci.yml`: `mvn verify` (Test Resources provisions PostgreSQL inside the CI runner automatically, same as locally)
+- [x] Generate the project via Micronaut Launch (`https://launch.micronaut.io`) or the `mn` CLI, Java 21, Maven, Micronaut Framework 4.x
+- [x] Dependencies: `micronaut-http-server-netty`, `micronaut-data-hibernate-jpa`, `micronaut-jdbc-hikari`, `postgresql` driver, `micronaut-flyway`, `micronaut-validation`, `micronaut-security-jwt`, `micronaut-openapi`, `micronaut-management`, `micronaut-cache-caffeine`
+- [x] Test dependencies: `micronaut-test-junit5`, `rest-assured`, `micronaut-test-resources-jdbc-postgresql`
+- [x] `ApiResponse<T>`, `PageResponse<T>`, `GlobalExceptionHandler`
+- [x] Flyway script `V1__init_schema.sql` (all tables from both domains)
+- [x] `application.yml`: JWT signing key location (RS256 key files under `dev-keys/` in dev/test, environment variables with no default in prod), Flyway enabled; `application-dev.yml`/`application-test.yml` left without a configured datasource (Test Resources provisions PostgreSQL automatically); a real connection string only under the packaged/production configuration
+- [x] `docker-compose.yml` (app + PostgreSQL, for the packaged application only - not used in dev/test), `Dockerfile`
+- [x] `.github/workflows/ci.yml`: `mvn verify` (Test Resources provisions PostgreSQL inside the CI runner automatically, same as locally)
 
 ## feature/auth
 
@@ -238,14 +243,14 @@ public record ApiResponse<T>(
 
 ### Tasks
 
-- [ ] `User` entity, `ActivationToken`, `BlacklistedToken`, `PasswordResetToken`
-- [ ] `UserRepository` (`@Repository` interface, Micronaut Data-generated)
-- [ ] `AuthService` (interface) + implementation: registration, activation, login (password hashing/verification via `micronaut-security`'s `BCryptPasswordEncoder`), logout, forgot/reset password
-- [ ] `forgotPassword` returns the exact same response - same status code, same body, roughly the same timing - whether or not the submitted email matches an existing account, so the endpoint can't be used to enumerate registered emails
-- [ ] `JwtIssuer`: builds a signed JWT via Micronaut Security's `JwtTokenGenerator`, with a unique `jti` claim and the user's resolved permissions embedded as a custom claim
-- [ ] A custom `TokenValidator` (Micronaut Security SPI) checking the incoming JWT's `jti` against `BlacklistedToken` and rejecting the token if found
-- [ ] `AuthController`
-- [ ] Tests (`@MicronautTest` + REST Assured): register → activate → login → access `/me`, logout followed by a rejected request with the same token, forgot/reset password flow
+- [x] `User` entity, `ActivationToken`, `BlacklistedToken`, `PasswordResetToken`
+- [x] `UserRepository` (`@Repository` interface, Micronaut Data-generated)
+- [x] `AuthService` (interface) + implementation: registration, activation, login (password hashing/verification via `BCryptPasswordEncoder` from `spring-security-crypto`, exposed as a bean: Micronaut Security 4.x ships no bcrypt encoder of its own), logout, forgot/reset password
+- [x] `forgotPassword` returns the exact same response - same status code, same body, roughly the same timing - whether or not the submitted email matches an existing account, so the endpoint can't be used to enumerate registered emails
+- [x] `JwtIssuer`: builds a signed JWT via Micronaut Security's `JwtTokenGenerator`, with a unique `jti` claim and the user's resolved permissions embedded as a custom claim
+- [x] A custom token check on the incoming JWT's `jti` against `BlacklistedToken`, rejecting the token if found. A plain `TokenValidator` bean cannot do this: the token validators are consulted independently and `JwtTokenValidator` would still authenticate a correctly signed token, so the check is a `GenericJwtClaimsValidator` (`BlacklistedTokenClaimsValidator`), which `JwtTokenValidator` calls after the signature check and off the event loop
+- [x] `AuthController` (public routes `@Secured(IS_ANONYMOUS)`, `logout` and `me` `@Secured(IS_AUTHENTICATED)`); Micronaut Security's own 401/403 rejections are turned into an `ApiResponse` by `AuthorizationApiHandler`
+- [x] Tests (`@MicronautTest` + REST Assured): register → activate → login → access `/me`, logout followed by a rejected request with the same token, forgot/reset password flow
 
 ## feature/rbac
 
@@ -272,19 +277,19 @@ Full CRUD for users, roles, and permissions. Assignments always flow in one dire
 
 ### Tasks
 
-- [ ] `Role`, `Permission`, `AuditLog` entities, `RoleRepository`, `PermissionRepository`, `AuditLogRepository`
-- [ ] `RbacService` (interface) + implementation:
+- [x] `Role`, `Permission`, `AuditLog` entities, `RoleRepository`, `PermissionRepository`, `AuditLogRepository`
+- [x] `RbacService` (interface) + implementation:
   - `createRole`/`updateRole`/`deleteRole` - `deleteRole` rejects if any user is still assigned this role
   - `createPermission`/`updatePermission`/`deletePermission` - `deletePermission` rejects if any role still has this permission assigned
-  - `assignPermissionToRole`/`removePermissionFromRole` - rejects removing `ROLE:WRITE` from a role if it would leave **zero** users anywhere holding a role that grants `ROLE:WRITE`
+  - `assignPermissionToRole`/`removePermissionFromRole` - rejects removing `ROLE:WRITE` from a role if it would leave **zero** users anywhere holding a role that grants `ROLE:WRITE`. Only enabled, unlocked accounts count as holders, and a PostgreSQL transaction advisory lock (`pg_advisory_xact_lock`) serialises every operation that can remove one (also `removeRoleFromUser` and an `updatePermission` that alters `ROLE:WRITE`). Because permissions travel inside the JWT, a user stripped of a role keeps that access in an already issued token until it expires: the rule is about database state, not live tokens
   - `assignRoleToUser`/`removeRoleFromUser` - the same last-admin check applied at the point of removal from a specific user
-- [ ] `AuditLogger`: a single `log(String action, String entityType, Long entityId, String details)` method, called from every method above
-- [ ] `RequiresPermission` annotation (`resource`, `action` attributes, meta-annotated `@Around`)
-- [ ] `PermissionInterceptor` (`MethodInterceptor<Object, Object>`): reads the resolved permissions from the authenticated `SecurityService`'s claims, compares against the intercepted method's `@RequiresPermission`, proceeds or returns 403
-- [ ] `UserController`, `RoleController`, `PermissionController`, each protected method annotated `@RequiresPermission` as listed above - `UserController` only manages role assignment on existing users, never user creation directly (registration stays exclusively `feature/auth`'s job)
-- [ ] A seeding step (a Flyway data-migration, or a `@EventListener(StartupEvent.class)` bean): baseline permissions covering every resource/action this project defines, assigned to a seeded `ADMIN` role - without this, nobody could ever be granted `ROLE:WRITE`/`PERMISSION:WRITE` to create the first assignment
-- [ ] `ExpiredTokenCleanupJob` (`@Scheduled(cron = "0 0 3 * * *")`): daily job deleting `BlacklistedToken`/`ActivationToken`/`PasswordResetToken` rows past their expiry
-- [ ] Tests: full CRUD on roles and permissions, the "still referenced" rejection on both `deleteRole` and `deletePermission`, `PermissionInterceptor` allowing/denying correctly, and specifically the last-admin rejection triggered both ways, plus an assertion that every mutation above produces a matching `AuditLog` row
+- [x] `AuditLogger`: `log(String action, String entityType, Long entityId, String details)`, called from every method above and joining the business transaction, plus `logRejected(...)` for refusals, written in an independent transaction (`REQUIRES_NEW`) so the refusal row survives the rollback of the rejected change
+- [x] `RequiresPermission` annotation (`resource`, `action` attributes, meta-annotated `@Around`)
+- [x] `PermissionInterceptor` (`MethodInterceptor<Object, Object>`): reads the `permissions` claim from the `Authentication` that `SecurityService` exposes, compares it against the intercepted method's `@RequiresPermission`, and either proceeds or throws `ForbiddenException` (rendered as a 403 `ApiResponse` by `GlobalExceptionHandler`)
+- [x] `UserController`, `RoleController`, `PermissionController`, each protected method annotated `@RequiresPermission` as listed above - `UserController` only manages role assignment on existing users, never user creation directly (registration stays exclusively `feature/auth`'s job)
+- [x] A seeding step: Flyway migration `V2__seed_baseline_rbac.sql` (14 baseline permissions covering every resource/action this project defines, assigned to a seeded `ADMIN` role - without this, nobody could ever be granted `ROLE:WRITE`/`PERMISSION:WRITE` to create the first assignment), plus an optional `AdminBootstrap` (`ServerStartupEvent` listener) that creates a first enabled administrator when `app.bootstrap-admin.email`/`password` are configured (dev profile only, with fake values)
+- [x] `ExpiredTokenCleanupJob` (`@Scheduled(cron = "0 0 3 * * *")`): daily job deleting `BlacklistedToken`/`ActivationToken`/`PasswordResetToken` rows past their expiry
+- [x] Tests: full CRUD on roles and permissions, the "still referenced" rejection on both `deleteRole` and `deletePermission`, `PermissionInterceptor` allowing/denying correctly, and specifically the last-admin rejection triggered both ways, plus an assertion that every mutation above produces a matching `AuditLog` row
 
 ## feature/categories
 
@@ -300,10 +305,10 @@ Full CRUD for users, roles, and permissions. Assignments always flow in one dire
 
 ### Tasks
 
-- [ ] `Category` entity, repository, contract/implementation service
-- [ ] Business rule: deleting a category that still has products is rejected (`BusinessRuleException` → 422)
-- [ ] `CategoryController`
-- [ ] Tests for every endpoint, including the rejection case and a permission-denied case
+- [x] `Category` entity, repository, contract/implementation service
+- [x] Business rule: deleting a category that still has products is rejected (`BusinessRuleException` → 422)
+- [x] `CategoryController`
+- [x] Tests for every endpoint, including the rejection case and a permission-denied case
 
 ## feature/products
 
@@ -321,10 +326,10 @@ Depends on `feature/categories` existing, since every product references one.
 
 ### Tasks
 
-- [ ] `Product` entity, repository, contract/implementation service
-- [ ] `ProductService.findById` annotated `@Cacheable("product-cache")`; `update`/`delete` annotated `@CacheInvalidate("product-cache")` on the same key
-- [ ] `ProductController`
-- [ ] Tests, including the category filter, a permission-denied case, and a cache invalidation test
+- [x] `Product` entity, repository, contract/implementation service
+- [x] `ProductService.findById` annotated `@Cacheable(value = "product-cache", parameters = "id")`; `update`/`delete` annotated `@CacheInvalidate(value = "product-cache", parameters = "id")` on the same key. The annotations work on the interface methods (verified). The default cache key is built from ALL parameters, so `parameters = "id"` is required: without it `update(id, request)` would never evict the entry cached by `findById(id)`. Only the `ProductResponse` DTO is cached (never an entity, and no category name, which a category rename would leave stale); the cache is bounded (500 entries, 10 minutes)
+- [x] `ProductController`
+- [x] Tests, including the category filter, a permission-denied case, and a cache invalidation test
 
 ## feature/customers
 
@@ -340,9 +345,9 @@ Depends on `feature/categories` existing, since every product references one.
 
 ### Tasks
 
-- [ ] `Customer` entity, repository, contract/implementation service
-- [ ] `CustomerController`
-- [ ] Tests
+- [x] `Customer` entity, repository, contract/implementation service
+- [x] `CustomerController`
+- [x] Tests
 
 ## feature/orders
 
@@ -356,9 +361,9 @@ Depends on `feature/categories` existing, since every product references one.
 
 ### Tasks
 
-- [ ] `Order` entity, repository, contract/implementation service: computes `total = quantity * product.unitPrice`
-- [ ] `OrderController`
-- [ ] Tests, including the total computation
+- [x] `Order` entity, repository, contract/implementation service: computes `total = quantity * product.unitPrice` (scale 2, `HALF_UP`, frozen in the order row: a later price change does not alter existing orders; a total that does not fit `NUMERIC(14,2)` is a 422). `Order` is a JPQL keyword, so the entity is declared `@Entity(name = "CustomerOrder")` on the `orders` table. Deleting a product or a customer that still has orders is refused with a 422
+- [x] `OrderController`
+- [x] Tests, including the total computation
 
 ## Order of work
 
@@ -388,7 +393,7 @@ Depends on `feature/categories` existing, since every product references one.
 - Micronaut HTTP controllers, request/response mapping, Bean Validation
 - Micronaut Data JPA: compile-time generated repository implementations
 - JWT issuance and validation with Micronaut Security
-- Token revocation via a blacklist checked through a custom `TokenValidator`
+- Token revocation via a blacklist checked through a custom JWT claims validator
 - Custom compile-time AOP for fine-grained, declarative permission checks
 - Centralized exception handling with `ExceptionHandler<T, R>`
 - Generic `ApiResponse<T>` DTO, contract/implementation pattern
@@ -405,5 +410,5 @@ Depends on `feature/categories` existing, since every product references one.
 1. Clone the repository : https://github.com/EdgarEldy/micronaut-tutorial.git and check out `develop`
 2. Follow the branches in order: `feature/core-architecture` → `feature/auth` → `feature/rbac` → `feature/categories` → `feature/products` → `feature/customers` → `feature/orders`
 3. Run in dev mode: `mvn mn:run` (Test Resources starts PostgreSQL automatically, no `docker-compose up` needed for this)
-4. Browse Swagger UI at `http://localhost:8080/swagger-ui`
+4. Browse Swagger UI at `http://localhost:8085/swagger-ui` in dev mode (the OpenAPI YAML is at `/swagger/micronaut-tutorial-0.1.yml`)
 5. To run the packaged application instead: `docker-compose up`

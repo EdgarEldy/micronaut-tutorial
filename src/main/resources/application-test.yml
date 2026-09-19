@@ -1,0 +1,5 @@
+# Test profile (active under @MicronautTest). No datasource URL: Test Resources starts PostgreSQL.
+app:
+  jwt:
+    private-key-location: file:dev-keys/privateKey.pem
+    public-key-location: file:dev-keys/publicKey.pem
