@@ -26,3 +26,74 @@ jobs:
       # locally, so the tests need nothing provisioned by the workflow.
       - name: Build and test
         run: ./mvnw -B verify
+
+  # Slower and independent of the test job: it compiles the application to a GraalVM native executable,
+  # measures JVM mode against native mode and checks that Dockerfile.native builds.
+  native-build:
+    runs-on: ubuntu-latest
+
+    # The packaged application (not the tests) needs a real database, so this job does declare a
+    # PostgreSQL service. Test Resources only exists in dev and test.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: micronaut_tutorial
+          POSTGRES_USER: micronaut
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U micronaut -d micronaut_tutorial"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      MICRONAUT_ENVIRONMENTS: prod
+      DB_URL: jdbc:postgresql://localhost:5432/micronaut_tutorial
+      DB_USER: micronaut
+      DB_PASSWORD: ci-only-password
+      # The repository's development key pair, fine for a throwaway CI database.
+      JWT_PUBLIC_KEY_LOCATION: file:${{ github.workspace }}/dev-keys/publicKey.pem
+      JWT_PRIVATE_KEY_LOCATION: file:${{ github.workspace }}/dev-keys/privateKey.pem
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up GraalVM 21
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: "21"
+          distribution: graalvm-community
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+
+      - name: Package the JVM application
+        run: ./mvnw -B package -DskipTests
+
+      - name: Build the native executable
+        run: ./mvnw -B package -Dpackaging=native-image -DskipTests
+
+      # The same scenario against both builds: what compile-time Micronaut generated must still work once
+      # GraalVM has closed the world (AOP interceptor, JWT validators, Micronaut Data, Flyway, cache).
+      - name: Smoke test the JVM and the native executable
+        env:
+          APP_BOOTSTRAP_ADMIN_EMAIL: ci-admin@example.com
+          APP_BOOTSTRAP_ADMIN_PASSWORD: ci-only-admin-password
+        run: |
+          scripts/smoke-test.sh jvm java -jar target/micronaut-tutorial-0.1.jar
+          # Both runs share the database: the users created by the first run must not collide.
+          scripts/smoke-test.sh native target/micronaut-tutorial
+
+      - name: Measure JVM mode against native mode
+        run: |
+          {
+            echo "| Mode | Ready after (ms) | Reported startup (ms) | RSS after load (MB) |"
+            echo "|---|---|---|---|"
+            scripts/measure-startup.sh jvm java -jar target/micronaut-tutorial-0.1.jar
+            scripts/measure-startup.sh native target/micronaut-tutorial
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          ls -l target/micronaut-tutorial
+
+      - name: Check that Dockerfile.native builds
+        run: docker build -f Dockerfile.native -t micronaut-tutorial:native .
