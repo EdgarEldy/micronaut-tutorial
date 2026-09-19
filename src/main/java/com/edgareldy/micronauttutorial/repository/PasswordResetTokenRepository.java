@@ -26,4 +26,7 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     long deleteByUserId(Long userId);
 
     long deleteByExpiryDateBefore(Instant threshold);
+
+    /** Purges only the expired tokens of one user, so an anonymous caller cannot wipe a valid pending token. */
+    long deleteByUserIdAndExpiryDateBefore(Long userId, Instant threshold);
 }
