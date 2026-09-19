@@ -1,0 +1,47 @@
+# Runs the PACKAGED application with a real PostgreSQL. It is not used in dev or test:
+# there, Test Resources starts the database by itself.
+#
+# Before the first "docker compose up --build":
+#   1. cp .env.example .env and set the password
+#   2. create a production RSA key pair in ./keys (the keys under dev-keys/ are for development only):
+#        mkdir -p keys
+#        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/privateKey.pem
+#        openssl pkey -in keys/privateKey.pem -pubout -out keys/publicKey.pem
+#        chmod 644 keys/*.pem
+#      The container runs as an unprivileged user whose uid differs from yours, so the keys must
+#      be readable by others. The keys directory is ignored by git and mounted read-only.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-micronaut_tutorial}
+      POSTGRES_USER: ${DB_USER:-micronaut}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-micronaut} -d ${DB_NAME:-micronaut_tutorial}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-micronaut_tutorial}
+      DB_USER: ${DB_USER:-micronaut}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      JWT_PUBLIC_KEY_LOCATION: file:/keys/publicKey.pem
+      JWT_PRIVATE_KEY_LOCATION: file:/keys/privateKey.pem
+    volumes:
+      - ./keys:/keys:ro
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  db-data:
