@@ -4,8 +4,10 @@ import com.edgareldy.micronauttutorial.dto.common.PageResponse;
 import com.edgareldy.micronauttutorial.dto.ecommerce.CustomerRequest;
 import com.edgareldy.micronauttutorial.dto.ecommerce.CustomerResponse;
 import com.edgareldy.micronauttutorial.entity.Customer;
+import com.edgareldy.micronauttutorial.exception.BusinessRuleException;
 import com.edgareldy.micronauttutorial.exception.ResourceNotFoundException;
 import com.edgareldy.micronauttutorial.repository.CustomerRepository;
+import com.edgareldy.micronauttutorial.repository.OrderRepository;
 import com.edgareldy.micronauttutorial.service.CustomerService;
 import io.micronaut.data.model.Pageable;
 import io.micronaut.data.model.Sort;
@@ -13,7 +15,7 @@ import io.micronaut.transaction.annotation.Transactional;
 import jakarta.inject.Singleton;
 
 /**
- * Default CustomerService. Delete is a plain delete until orders exist (feature/orders adds the refusal).
+ * Default CustomerService. Delete is refused while orders reference the customer.
  * <p>
  * Created edgar.muhamyangabo on 9/19/26
  * Author : edgar.muhamyangabo
@@ -25,9 +27,11 @@ import jakarta.inject.Singleton;
 public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerRepository customers;
+    private final OrderRepository orders;
 
-    public CustomerServiceImpl(CustomerRepository customers) {
+    public CustomerServiceImpl(CustomerRepository customers, OrderRepository orders) {
         this.customers = customers;
+        this.orders = orders;
     }
 
     @Override
@@ -59,7 +63,12 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     public void delete(Long id) {
-        customers.delete(load(id));
+        Customer customer = load(id);
+        long orderCount = orders.countByCustomerId(id);
+        if (orderCount > 0) {
+            throw new BusinessRuleException("Customer " + id + " has " + orderCount + " order(s) and cannot be deleted");
+        }
+        customers.delete(customer);
     }
 
     private Customer load(Long id) {
