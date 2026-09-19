@@ -243,14 +243,14 @@ Micronaut picks the exception handler whose type is closest to the thrown except
 
 ### Tasks
 
-- [ ] `User` entity, `ActivationToken`, `BlacklistedToken`, `PasswordResetToken`
-- [ ] `UserRepository` (`@Repository` interface, Micronaut Data-generated)
-- [ ] `AuthService` (interface) + implementation: registration, activation, login (password hashing/verification via `micronaut-security`'s `BCryptPasswordEncoder`), logout, forgot/reset password
-- [ ] `forgotPassword` returns the exact same response - same status code, same body, roughly the same timing - whether or not the submitted email matches an existing account, so the endpoint can't be used to enumerate registered emails
-- [ ] `JwtIssuer`: builds a signed JWT via Micronaut Security's `JwtTokenGenerator`, with a unique `jti` claim and the user's resolved permissions embedded as a custom claim
-- [ ] A custom `TokenValidator` (Micronaut Security SPI) checking the incoming JWT's `jti` against `BlacklistedToken` and rejecting the token if found
-- [ ] `AuthController`
-- [ ] Tests (`@MicronautTest` + REST Assured): register → activate → login → access `/me`, logout followed by a rejected request with the same token, forgot/reset password flow
+- [x] `User` entity, `ActivationToken`, `BlacklistedToken`, `PasswordResetToken`
+- [x] `UserRepository` (`@Repository` interface, Micronaut Data-generated)
+- [x] `AuthService` (interface) + implementation: registration, activation, login (password hashing/verification via `BCryptPasswordEncoder` from `spring-security-crypto`, exposed as a bean: Micronaut Security 4.x ships no bcrypt encoder of its own), logout, forgot/reset password
+- [x] `forgotPassword` returns the exact same response - same status code, same body, roughly the same timing - whether or not the submitted email matches an existing account, so the endpoint can't be used to enumerate registered emails
+- [x] `JwtIssuer`: builds a signed JWT via Micronaut Security's `JwtTokenGenerator`, with a unique `jti` claim and the user's resolved permissions embedded as a custom claim
+- [x] A custom token check on the incoming JWT's `jti` against `BlacklistedToken`, rejecting the token if found. A plain `TokenValidator` bean cannot do this: the token validators are consulted independently and `JwtTokenValidator` would still authenticate a correctly signed token, so the check is a `GenericJwtClaimsValidator` (`BlacklistedTokenClaimsValidator`), which `JwtTokenValidator` calls after the signature check and off the event loop
+- [x] `AuthController` (public routes `@Secured(IS_ANONYMOUS)`, `logout` and `me` `@Secured(IS_AUTHENTICATED)`); Micronaut Security's own 401/403 rejections are turned into an `ApiResponse` by `AuthorizationApiHandler`
+- [x] Tests (`@MicronautTest` + REST Assured): register → activate → login → access `/me`, logout followed by a rejected request with the same token, forgot/reset password flow
 
 ## feature/rbac
 
@@ -393,7 +393,7 @@ Depends on `feature/categories` existing, since every product references one.
 - Micronaut HTTP controllers, request/response mapping, Bean Validation
 - Micronaut Data JPA: compile-time generated repository implementations
 - JWT issuance and validation with Micronaut Security
-- Token revocation via a blacklist checked through a custom `TokenValidator`
+- Token revocation via a blacklist checked through a custom JWT claims validator
 - Custom compile-time AOP for fine-grained, declarative permission checks
 - Centralized exception handling with `ExceptionHandler<T, R>`
 - Generic `ApiResponse<T>` DTO, contract/implementation pattern
