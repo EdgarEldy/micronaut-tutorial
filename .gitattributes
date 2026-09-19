@@ -1,0 +1,19 @@
+# Normalize line endings: text files are stored with LF in the repository
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Unix scripts must keep LF, otherwise they break on Linux/macOS/Docker
+mvnw text eol=lf
+*.sh text eol=lf
+
+# Binary files: never touch line endings or diff as text
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
