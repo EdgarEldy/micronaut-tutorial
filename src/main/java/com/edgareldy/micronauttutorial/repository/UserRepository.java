@@ -27,13 +27,24 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     /**
-     * Permission codes "RESOURCE:ACTION" granted to the user through its roles. Native SQL because the
-     * Role and Permission entities only arrive with feature/rbac: the query works on the tables directly.
-     * Empty until permissions are seeded and assigned.
+     * Permission codes "RESOURCE:ACTION" granted to the user through its roles, straight from the join
+     * tables (no entity loading). Empty when the user holds no role.
      */
     @Query(value = "SELECT DISTINCT p.resource || ':' || p.action FROM role_user ru "
             + "JOIN role_permission rp ON rp.role_id = ru.role_id "
             + "JOIN permissions p ON p.id = rp.permission_id "
             + "WHERE ru.user_id = :userId ORDER BY 1", nativeQuery = true)
     List<String> findPermissionCodesByUserId(Long userId);
+
+    /** How many users currently hold the role (deleteRole is refused while this is above zero). */
+    @Query("SELECT COUNT(u) FROM User u JOIN u.roles r WHERE r.id = :roleId")
+    long countUsersByRoleId(Long roleId);
+
+    /**
+     * Users able to manage roles: enabled, not locked, and holding ROLE:WRITE through any of their roles.
+     * DISTINCT so a user holding it through several roles counts once. Basis of the last-admin rule.
+     */
+    @Query("SELECT COUNT(DISTINCT u.id) FROM User u JOIN u.roles r JOIN r.permissions p "
+            + "WHERE u.enabled = TRUE AND u.accountLocked = FALSE AND p.resource = 'ROLE' AND p.action = 'WRITE'")
+    long countRoleWriteHolders();
 }

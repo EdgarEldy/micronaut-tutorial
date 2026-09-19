@@ -1,5 +1,6 @@
 package com.edgareldy.micronauttutorial.dto.common;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.micronaut.data.model.Page;
 import io.micronaut.serde.annotation.Serdeable;
 
@@ -17,7 +18,7 @@ import java.util.function.Function;
  */
 @Serdeable
 public record PageResponse<T>(
-        List<T> content,
+        @JsonInclude(JsonInclude.Include.ALWAYS) List<T> content,
         int page,
         int size,
         long totalElements,

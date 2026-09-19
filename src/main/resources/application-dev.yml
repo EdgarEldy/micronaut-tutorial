@@ -8,3 +8,7 @@ app:
     # Relative to the working directory (repo root). Dev keys only, never used in production.
     private-key-location: file:dev-keys/privateKey.pem
     public-key-location: file:dev-keys/publicKey.pem
+  # Dev only fake account created at startup (see AdminBootstrap). Never set in test or prod.
+  bootstrap-admin:
+    email: admin@dev.local
+    password: dev-only-not-a-secret-1

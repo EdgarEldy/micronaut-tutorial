@@ -7,6 +7,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -49,6 +51,24 @@ public final class TestDatabase {
                 bind(ps, params);
                 try (ResultSet rs = ps.executeQuery()) {
                     return rs.next() ? rs.getString(1) : null;
+                }
+            } catch (SQLException e) {
+                throw new IllegalStateException(sql, e);
+            }
+        });
+    }
+
+    /** Runs a query returning one BIGINT column and collects every row. */
+    public List<Long> queryLongs(String sql, Object... params) {
+        return connections.execute(ConnectionDefinition.DEFAULT, status -> {
+            try (PreparedStatement ps = status.getConnection().prepareStatement(sql)) {
+                bind(ps, params);
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<Long> values = new ArrayList<>();
+                    while (rs.next()) {
+                        values.add(rs.getLong(1));
+                    }
+                    return values;
                 }
             } catch (SQLException e) {
                 throw new IllegalStateException(sql, e);
