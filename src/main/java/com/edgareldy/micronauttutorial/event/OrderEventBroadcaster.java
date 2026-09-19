@@ -3,6 +3,8 @@ package com.edgareldy.micronauttutorial.event;
 import com.edgareldy.micronauttutorial.dto.ecommerce.OrderResponse;
 import io.micronaut.transaction.annotation.TransactionalEventListener;
 import jakarta.inject.Singleton;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
@@ -27,6 +29,8 @@ import reactor.core.publisher.Sinks;
 @Singleton
 public class OrderEventBroadcaster {
 
+    private static final Logger LOG = LoggerFactory.getLogger(OrderEventBroadcaster.class);
+
     private final Sinks.Many<OrderResponse> sink = Sinks.many().multicast().directBestEffort();
 
     /**
@@ -37,8 +41,14 @@ public class OrderEventBroadcaster {
     @TransactionalEventListener
     public void onOrderCreated(OrderCreatedEvent event) {
         // A sink accepts one emitting thread at a time: commits can complete on several threads, so serialize.
+        Sinks.EmitResult result;
         synchronized (sink) {
-            sink.tryEmitNext(event.order());
+            result = sink.tryEmitNext(event.order());
+        }
+        // FAIL_ZERO_SUBSCRIBER just means nobody is connected. Anything else means a live subscriber may have
+        // missed the event, which must not go unnoticed.
+        if (result.isFailure() && result != Sinks.EmitResult.FAIL_ZERO_SUBSCRIBER) {
+            LOG.warn("Order event {} was not delivered to every subscriber: {}", event.order().id(), result);
         }
     }
 
