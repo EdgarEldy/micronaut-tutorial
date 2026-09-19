@@ -18,6 +18,7 @@ import com.edgareldy.micronauttutorial.repository.BlacklistedTokenRepository;
 import com.edgareldy.micronauttutorial.repository.PasswordResetTokenRepository;
 import com.edgareldy.micronauttutorial.repository.UserRepository;
 import com.edgareldy.micronauttutorial.security.JwtIssuer;
+import com.edgareldy.micronauttutorial.security.TokenExpiry;
 import com.edgareldy.micronauttutorial.security.TokenHasher;
 import com.edgareldy.micronauttutorial.security.TokenProperties;
 import com.edgareldy.micronauttutorial.service.AuthService;
@@ -153,7 +154,7 @@ public class AuthServiceImpl implements AuthService {
         }
         Instant now = Instant.now();
         blacklistedTokens.save(new BlacklistedToken(Long.valueOf(authentication.getName()),
-                TokenHasher.sha256Hex(rawToken), jti, now, epochToInstant(authentication.getAttributes().get("exp"))));
+                TokenHasher.sha256Hex(rawToken), jti, now, TokenExpiry.of(authentication)));
         // Housekeeping: entries of tokens that have expired anyway are useless.
         blacklistedTokens.deleteByExpiresAtBefore(now);
     }
@@ -237,16 +238,6 @@ public class AuthServiceImpl implements AuthService {
     private static List<String> permissionsOf(Authentication authentication) {
         Object value = authentication.getAttributes().get("permissions");
         return value instanceof List<?> list ? (List<String>) list : List.of();
-    }
-
-    private static Instant epochToInstant(Object exp) {
-        if (exp instanceof Instant instant) {
-            return instant;
-        }
-        if (exp instanceof java.util.Date date) {
-            return date.toInstant();
-        }
-        return Instant.ofEpochSecond(((Number) exp).longValue());
     }
 
     private static UserResponse toResponse(User user, List<String> permissions) {
