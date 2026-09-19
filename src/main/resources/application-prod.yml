@@ -1,0 +1,12 @@
+# Production profile (packaged application). Every secret comes from the environment, with no default:
+# a missing variable makes the startup fail instead of silently using a weak value.
+datasources:
+  default:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+
+app:
+  jwt:
+    private-key-location: ${JWT_PRIVATE_KEY_LOCATION}
+    public-key-location: ${JWT_PUBLIC_KEY_LOCATION}
